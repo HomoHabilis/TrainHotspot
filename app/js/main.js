@@ -303,7 +303,6 @@ async function renderTrip(id) {
       <div class="delay">
         <span>Delay: <strong id="delay-v"></strong></span>
         <button class="btn sm" data-d="-1">−1</button><button class="btn sm" data-d="1">+1</button><button class="btn sm" data-d="5">+5</button>
-        ${trip.train?.tripId ? '<button class="btn sm" id="b-vt">Update online</button>' : ''}
       </div>
       <p id="track-info" class="small muted"></p>
       <details class="small"><summary>What works when the phone is locked?</summary>
@@ -338,13 +337,8 @@ async function renderTrip(id) {
   $view.querySelectorAll('[data-d]').forEach((b) => b.addEventListener('click', () => {
     L.tracker.delayMs += Number(b.dataset.d) * 60000; L.refresh(true);
   }));
-  $view.querySelector('#b-vt')?.addEventListener('click', async () => {
-    try {
-      const d = await currentDelay(trip.train.tripId);
-      if (d == null) throw new Error('No live delay data for this train yet');
-      L.tracker.setDelayMin(d); L.refresh(true); toast(`Delay updated: ${d} min`);
-    } catch (e) { toast(e.message); }
-  });
+  // "Update now" lives in the status card, which is redrawn: delegate the click
+  $view.querySelector('#now').addEventListener('click', (e) => { if (e.target.closest('#b-now')) L.updateNow(); });
   $view.querySelector('#b-sim').addEventListener('click', () => { L.toggleSim(); paintControls(); });
 
   $view.querySelector('#stops').innerHTML = trip.stops.map((s, i) => `<li><span class="t">${s.arr && i ? hhmm(s.arr) : ''}${s.dep && i < trip.stops.length - 1 ? (i ? ' – ' : '') + hhmm(s.dep) : ''}</span> ${esc(s.name)} <span class="muted">km ${Math.round(s.km)}</span></li>`).join('');
@@ -408,6 +402,29 @@ function startLive(trip) {
   };
   s.timers.push(setInterval(() => s.refresh(false), ALERT_CHECK_MS));
   s.timers.push(setInterval(() => { if (s.sim) s.refresh(false); }, 1000));
+  // Manual refresh: fresh GPS fix (if tracking), live delay (if online and looked up by
+  // train number, used only when GPS hasn't fixed the delay recently), then redraw.
+  s.updateNow = async () => {
+    if (s.updating) return;
+    s.updating = true; s.refresh(true);
+    const notes = [];
+    const jobs = [];
+    if (s.tracking && !s.sim && 'geolocation' in navigator) {
+      jobs.push(new Promise((res) => navigator.geolocation.getCurrentPosition(
+        (p) => { s.tracker.onFix(p); notes.push('GPS'); res(); },
+        () => res(), { enableHighAccuracy: true, maximumAge: 0, timeout: 15000 })));
+    }
+    if (trip.train?.tripId && navigator.onLine && !s.sim) {
+      jobs.push(currentDelay(trip.train.tripId).then((d) => {
+        const last = s.tracker.fixes[s.tracker.fixes.length - 1];
+        if (d != null && !(last && Date.now() - last.t < 120000)) { s.tracker.setDelayMin(d); notes.push(`delay ${d} min`); }
+      }).catch(() => {}));
+    }
+    await Promise.all(jobs);
+    s.updating = false;
+    s.refresh(true);
+    toast(notes.length ? `Updated (${notes.join(', ')})` : 'Updated');
+  };
   s.onVis = () => { if (document.visibilityState === 'visible') s.refresh(true); };
   document.addEventListener('visibilitychange', s.onVis);
   live = s;
@@ -469,7 +486,7 @@ function paintLive(s, est, now) {
     }
   }
   const src = { gps: 'GPS', 'dead-reckoning': 'estimated (no GPS fix)', schedule: 'timetable', replay: 'replay' }[est.source] || est.source;
-  html += `<p class="small muted">Position: ${src}${est.speed ? ` · ${Math.round(est.speed)} km/h` : ''} · km ${est.km.toFixed(0)} of ${Math.round(trip.lengthKm)} · updated ${new Date(now).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: s.sim ? undefined : '2-digit' })}</p>`;
+  html += `<div class="now-foot"><p class="small muted">Position: ${src}${est.speed ? ` · ${Math.round(est.speed)} km/h` : ''} · km ${est.km.toFixed(0)} of ${Math.round(trip.lengthKm)} · updated ${new Date(now).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: s.sim ? undefined : '2-digit' })}</p><button class="btn sm" id="b-now"${s.updating ? ' disabled' : ''}>${s.updating ? 'Updating…' : 'Update now'}</button></div>`;
   el('#now').innerHTML = html;
 
   // Percentages (whole trip + remaining)
