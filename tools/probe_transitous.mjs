@@ -1,4 +1,11 @@
-import { findTrain, tripDetails } from '../app/js/transitous.js';
+const realFetch = globalThis.fetch;
+const UA = process.env.UA;
+globalThis.fetch = async (u, o = {}) => {
+  const r = await realFetch(u, UA ? { ...o, headers: { 'User-Agent': UA } } : o);
+  if (!r.ok) console.log('HTTP', r.status, String(u).slice(0, 160), (await r.clone().text()).slice(0, 200));
+  return r;
+};
+const { findTrain, tripDetails } = await import('../app/js/transitous.js');
 const tomorrow = new Date(Date.now() + 86400000);
 const z = (n) => String(n).padStart(2, '0');
 const date = `${tomorrow.getFullYear()}-${z(tomorrow.getMonth() + 1)}-${z(tomorrow.getDate())}`;
