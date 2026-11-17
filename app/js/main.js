@@ -1,7 +1,7 @@
 import { loadGraph, loadStations } from './graph.js';
 import { buildTrip, computeCoverage, timeAtKm } from './trip.js';
 import { StationIndex } from './stations.js';
-import { searchTrain, trainDetails, currentDelay, isHighSpeedCategory } from './vt.js';
+import { findTrain, tripDetails, currentDelay } from './transitous.js';
 import { Tracker } from './tracker.js';
 import { Alerter, alertPlan, requestNotifications, ScreenLock, KeepAlive, scheduleTriggers, predictedTime } from './alerts.js';
 import { saveTrip, deleteTrip, getTrip, listTrips, loadSettings, saveSettings, persistStorage } from './store.js';
@@ -112,10 +112,14 @@ function renderNew() {
     </div>
     <section class="card tabpanel" id="tab-train">
       <form id="f-train" class="form">
-        <label>Train number <input name="num" inputmode="numeric" pattern="[0-9]+" required placeholder="e.g. 9531" autocomplete="off"></label>
-        <label>Date <input name="date" type="date" required value="${todayStr()}"></label>
+        <div class="row two">
+          <label>Train number <input name="num" inputmode="numeric" pattern="[0-9]+" required placeholder="e.g. 9531" autocomplete="off"></label>
+          <label>Date <input name="date" type="date" required value="${todayStr()}"></label>
+        </div>
+        <label>Getting on at <input name="board" list="stlist" required autocomplete="off" placeholder="Your departure station"></label>
+        <label>Getting off at <input name="alight" list="stlist" autocomplete="off" placeholder="Optional: end of the line if empty"></label>
         <button class="btn primary" type="submit">Find train</button>
-        <p class="muted small">Looks up the stops and times on ViaggiaTreno (Trenitalia's live service, covers trains on the RFI network). Needs network now, not during the trip.</p>
+        <p class="muted small">Stops and times come from <a href="https://transitous.org" target="_blank" rel="noopener">Transitous</a> (Trenitalia and Trenord trains; Italo not available). Needs network now, not during the trip.</p>
       </form>
       <div id="train-results"></div>
     </section>
@@ -134,8 +138,8 @@ function renderNew() {
         <button class="btn primary" type="submit">Build trip</button>
         <p class="muted small">Arrival time is optional: without it the app estimates running times from line speeds. Adding the stops your train makes keeps the route on the right line.</p>
       </form>
-      <datalist id="stlist"></datalist>
     </section>
+    <datalist id="stlist"></datalist>
     <div id="build-status"></div>`;
 
   const tabs = $view.querySelectorAll('.tab');
@@ -143,8 +147,9 @@ function renderNew() {
     tabs.forEach((x) => { x.classList.toggle('active', x === t); x.setAttribute('aria-selected', x === t); });
     $view.querySelector('#tab-train').hidden = t.dataset.tab !== 'train';
     $view.querySelector('#tab-stations').hidden = t.dataset.tab !== 'stations';
-    if (t.dataset.tab === 'stations') fillStationList();
+    fillStationList();
   }));
+  fillStationList();
 
   $view.querySelector('#add-via').addEventListener('click', () => {
     const vias = $view.querySelector('#vias');
@@ -172,36 +177,47 @@ async function onTrainSearch(ev) {
   ev.preventDefault();
   const f = ev.target, out = $view.querySelector('#train-results');
   const num = f.num.value.trim(), date = f.date.value;
-  out.innerHTML = '<p class="muted">Searching…</p>';
+  const idx = await stations();
+  const board = idx.byName(f.board.value) || idx.match(f.board.value);
+  const alight = f.alight.value.trim() ? (idx.byName(f.alight.value) || idx.match(f.alight.value)) : null;
+  if (!board) { out.innerHTML = '<p class="error">Unknown departure station. Pick one from the list.</p>'; return; }
+  if (f.alight.value.trim() && !alight) { out.innerHTML = '<p class="error">Unknown arrival station. Pick one from the list.</p>'; return; }
+  out.innerHTML = '<p class="muted">Searching the timetable…</p>';
   try {
-    const res = await searchTrain(num);
-    if (!res.length) { out.innerHTML = '<p>No train found with that number.</p>'; return; }
-    out.innerHTML = `<p class="small muted">Pick your train:</p><ul class="choices">${res.map((r, i) =>
-      `<li><button class="btn choice" data-i="${i}">${esc(r.label)}</button></li>`).join('')}</ul>`;
-    out.querySelectorAll('[data-i]').forEach((b) => b.addEventListener('click', () => onTrainPick(res[b.dataset.i], date)));
-    if (res.length === 1) onTrainPick(res[0], date);
-  } catch (e) {
-    out.innerHTML = `<p class="error">${esc(e.message)}</p>`;
-    if (e.blocked) {
-      out.innerHTML += '<button class="btn" id="go-st">Use stations instead</button>';
-      out.querySelector('#go-st').addEventListener('click', () => $view.querySelector('[data-tab=stations]').click());
+    const res = await findTrain(num, date, board);
+    if (!res.length) {
+      out.innerHTML = `<p>No train ${esc(num)} found at ${esc(board.n)} on that day. Check the number and station, or use the Stations tab (Italo trains are not covered).</p>`;
+      return;
     }
+    if (res.length === 1) { out.innerHTML = ''; return onTrainPick(res[0], board, alight); }
+    out.innerHTML = `<p class="small muted">Pick your train:</p><ul class="choices">${res.map((r, i) =>
+      `<li><button class="btn choice" data-i="${i}">${hhmm(r.dep)} · ${esc(r.label)}</button></li>`).join('')}</ul>`;
+    out.querySelectorAll('[data-i]').forEach((b) => b.addEventListener('click', () => onTrainPick(res[b.dataset.i], board, alight)));
+  } catch (e) {
+    out.innerHTML = `<p class="error">${esc(e.message)}</p><button class="btn" id="go-st">Use stations instead</button>`;
+    out.querySelector('#go-st').addEventListener('click', () => $view.querySelector('[data-tab=stations]').click());
   }
 }
 
-async function onTrainPick(r, dateStr) {
+async function onTrainPick(r, board, alight) {
   const status = $view.querySelector('#build-status');
   status.innerHTML = '<section class="card"><p>Loading train details…</p></section>';
   try {
-    const d = await trainDetails(r.origCode, r.num, r.millis);
-    // Shift times to the chosen date (same timetable assumed)
-    const shift = localMidnight(dateStr) - new Date(new Date(r.millis).toDateString()).getTime();
-    const stops = d.stops.map((s) => ({ ...s, arr: s.arr ? s.arr + shift : null, dep: s.dep ? s.dep + shift : null }));
+    const d = await tripDetails(r.tripId);
+    // keep only the part of the run the user travels on
+    const near = (st) => {
+      let bi = -1, bd = Infinity;
+      d.stops.forEach((s, i) => { const x = (s.lat - st.la) ** 2 + (s.lon - st.lo) ** 2; if (x < bd) { bd = x; bi = i; } });
+      return bi;
+    };
+    let i0 = near(board), i1 = alight ? near(alight) : d.stops.length - 1;
+    if (i1 <= i0) i1 = d.stops.length - 1;
+    const stops = d.stops.slice(i0, i1 + 1).map((s, i, arr) => ({ ...s, arr: i === 0 ? null : s.arr, dep: i === arr.length - 1 ? null : s.dep }));
     await buildAndOpen({
       stops, title: `${d.title} ${stops[0].name} → ${stops[stops.length - 1].name}`,
-      avoidHighSpeed: !isHighSpeedCategory(d.category) && /^(REG|RV|R|S|IC)/i.test(d.category),
-      source: 'viaggiatreno',
-      train: { num: r.num, origCode: r.origCode, millis: r.millis + shift, category: d.category, delayMin: shift === 0 ? d.delayMin : 0 },
+      avoidHighSpeed: d.mode !== 'HIGHSPEED_RAIL' && !/^(FR|FA|FB|EC|ES)/.test(d.category),
+      source: 'transitous',
+      train: { tripId: r.tripId, title: d.title, category: d.category, delayMin: d.realTime ? d.delayMin : 0 },
     });
   } catch (e) {
     status.innerHTML = `<section class="card error"><p>${esc(e.message)}</p></section>`;
@@ -235,7 +251,7 @@ async function buildAndOpen({ stops, title, avoidHighSpeed, source, train }) {
     await new Promise((r) => setTimeout(r, 30));
     let prevSt = null;
     const routeStops = stops.map((s) => {
-      const st = s.station || idx.match(s.name, s.code, prevSt);
+      const st = s.station || (s.lat != null ? idx.nearest(s.lat, s.lon, 800) : null) || idx.match(s.name, s.code, prevSt);
       if (st) prevSt = st;
       return { ...s, name: st ? st.n : s.name, cands: st ? st.g : [] };
     });
@@ -287,7 +303,7 @@ async function renderTrip(id) {
       <div class="delay">
         <span>Delay: <strong id="delay-v"></strong></span>
         <button class="btn sm" data-d="-1">−1</button><button class="btn sm" data-d="1">+1</button><button class="btn sm" data-d="5">+5</button>
-        ${trip.train ? '<button class="btn sm" id="b-vt">Update online</button>' : ''}
+        ${trip.train?.tripId ? '<button class="btn sm" id="b-vt">Update online</button>' : ''}
       </div>
       <p id="track-info" class="small muted"></p>
       <details class="small"><summary>What works when the phone is locked?</summary>
@@ -324,8 +340,8 @@ async function renderTrip(id) {
   }));
   $view.querySelector('#b-vt')?.addEventListener('click', async () => {
     try {
-      const d = await currentDelay(trip.train.origCode, trip.train.num, trip.train.millis);
-      if (d == null) throw new Error('No delay data yet');
+      const d = await currentDelay(trip.train.tripId);
+      if (d == null) throw new Error('No live delay data for this train yet');
       L.tracker.setDelayMin(d); L.refresh(true); toast(`Delay updated: ${d} min`);
     } catch (e) { toast(e.message); }
   });
@@ -556,7 +572,7 @@ function renderSettings() {
     </form>
     <section class="card small">
       <h2>About the data</h2>
-      <p>Tracks and tunnels come from OpenStreetMap (© OpenStreetMap contributors, ODbL), refreshed monthly. Train stops and times come live from ViaggiaTreno when you look up a train number. Nothing is sent to any TrainHotspot server: there is none.</p>
+      <p>Tracks and tunnels come from OpenStreetMap (© OpenStreetMap contributors, ODbL), refreshed monthly. Train stops and times come from <a href="https://transitous.org">Transitous</a> when you look up a train number (Trenitalia data via BusOne, for non-commercial use). Nothing is sent to any TrainHotspot server: there is none.</p>
       <p>"No network" zones are estimated from tunnels. Some tunnels have repeaters, and some open stretches (deep valleys, rural areas) have poor signal; those are not yet taken into account.</p>
     </section>`;
   const form = $view.querySelector('#f-set');

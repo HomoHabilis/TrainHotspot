@@ -139,3 +139,5 @@ h2.inline { display: inline; font-size: 1rem; }
   .form .row label:first-child { grid-column: 1 / -1; }
   .st-name { font-size: 24px; } .st-time { font-size: 22px; }
 }
+.form .row.two { grid-template-columns: 1fr 1fr; }
+@media (max-width: 480px) { .form .row.two label:first-child { grid-column: auto; } }
