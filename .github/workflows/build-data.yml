@@ -1,0 +1,74 @@
+name: Build rail data
+
+# Rebuilds app/data/*.json from the OpenStreetMap Italy extract and commits it
+# to the branch it runs on. Runs monthly, on demand, and when the build tools change.
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 3 1 * *"
+  push:
+    paths:
+      - "tools/**"
+      - ".github/workflows/build-data.yml"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-data-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Probe ViaggiaTreno CORS headers (diagnostic only)
+        continue-on-error: true
+        run: |
+          curl -sS -m 30 -D - -o /dev/null -H "Origin: https://homohabilis.github.io" \
+            "https://www.viaggiatreno.it/infomobilita/resteasy/viaggiatreno/cercaNumeroTrenoTrenoAutocomplete/9600" || true
+          echo "---- body"
+          curl -sS -m 30 "https://www.viaggiatreno.it/infomobilita/resteasy/viaggiatreno/cercaNumeroTrenoTrenoAutocomplete/9600" | head -5 || true
+          echo "---- preflight"
+          curl -sS -m 30 -X OPTIONS -D - -o /dev/null -H "Origin: https://homohabilis.github.io" \
+            -H "Access-Control-Request-Method: GET" \
+            "https://www.viaggiatreno.it/infomobilita/resteasy/viaggiatreno/cercaNumeroTrenoTrenoAutocomplete/9600" || true
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install tools
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq osmium-tool
+          pip install -q osmium
+
+      - name: Download and filter OSM Italy extract
+        run: |
+          curl -sSL -o italy.osm.pbf https://download.geofabrik.de/europe/italy-latest.osm.pbf
+          osmium tags-filter italy.osm.pbf w/railway=rail n/railway=station,halt -o rail.osm.pbf --overwrite
+          ls -lh italy.osm.pbf rail.osm.pbf
+          rm italy.osm.pbf
+
+      - name: Fetch ViaggiaTreno station codes (best effort)
+        continue-on-error: true
+        run: python tools/fetch_vt_stations.py vt_stations.json
+
+      - name: Build graph
+        run: |
+          mkdir -p app/data
+          python tools/build_rail_data.py rail.osm.pbf app/data vt_stations.json
+          ls -lh app/data
+          gzip -k -9 -c app/data/graph.json | wc -c
+
+      - name: Commit data if changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898315+github-actions[bot]@users.noreply.github.com"
+          git add app/data
+          if git diff --cached --quiet; then echo "no change"; exit 0; fi
+          git commit -m "Update rail data from OpenStreetMap"
+          git push

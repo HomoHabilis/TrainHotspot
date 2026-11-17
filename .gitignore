@@ -1,0 +1,4 @@
+*.osm.pbf
+vt_stations.json
+node_modules/
+__pycache__/
