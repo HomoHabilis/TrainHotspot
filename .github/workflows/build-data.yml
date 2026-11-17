@@ -48,7 +48,7 @@ jobs:
 
       - name: Download and filter OSM Italy extract
         run: |
-          curl -sSL -o italy.osm.pbf https://download.geofabrik.de/europe/italy-latest.osm.pbf
+          curl -sSL --retry 3 -o italy.osm.pbf https://download.geofabrik.de/europe/italy-latest.osm.pbf
           osmium tags-filter italy.osm.pbf w/railway=rail n/railway=station,halt -o rail.osm.pbf --overwrite
           ls -lh italy.osm.pbf rail.osm.pbf
           rm italy.osm.pbf
@@ -71,4 +71,5 @@ jobs:
           git add app/data
           if git diff --cached --quiet; then echo "no change"; exit 0; fi
           git commit -m "Update rail data from OpenStreetMap"
-          git push
+          git pull --rebase origin "${GITHUB_REF_NAME}"
+          git push origin "HEAD:${GITHUB_REF_NAME}"
