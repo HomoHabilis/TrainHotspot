@@ -22,6 +22,7 @@ export function buildTrip(graph, routeRes, stops, meta = {}) {
   const lat = [], lon = [], cum = [];
   const segs = []; // per graph edge: { s, e, tunnel, speed, name }
   const stopKm = new Array(stops.length).fill(null);
+  const landmarks = [];
   let km = 0;
   const pushPt = (la, lo) => {
     if (lat.length) {
@@ -52,6 +53,29 @@ export function buildTrip(graph, routeRes, stops, meta = {}) {
         nodeKm.set(reverse ? graph.ea[edge] : graph.eb[edge], k);
       }
     });
+    // stations on or near the route (for labels on non-stop stretches, e.g. HSR bypasses)
+    if (meta.stationList) {
+      const C = 0.05, grid = new Map();
+      for (let i = 0; i < lat.length; i++) {
+        const key = Math.floor(lat[i] / C) + ':' + Math.floor(lon[i] / C);
+        if (!grid.has(key)) grid.set(key, []);
+        grid.get(key).push(i);
+      }
+      const seen = new Map();
+      for (const st of meta.stationList) {
+        const ci = Math.floor(st.la / C), cj = Math.floor(st.lo / C);
+        let best = Infinity, bk = 0;
+        for (let di = -1; di <= 1; di++) for (let dj = -1; dj <= 1; dj++) {
+          for (const i of grid.get((ci + di) + ':' + (cj + dj)) || []) {
+            const d = haversine(st.la, st.lo, lat[i], lon[i]);
+            if (d < best) { best = d; bk = cum[i]; }
+          }
+        }
+        const major = st.g.length >= 8 || /centrale/i.test(st.n);
+        if (best < (major ? 3000 : 600) && (!seen.has(st.n) || seen.get(st.n).d > best)) seen.set(st.n, { name: st.n, km: bk, major, rank: (/centrale/i.test(st.n) ? 100 : 0) + st.g.length, d: best, on: best < 300 });
+      }
+      landmarks.push(...[...seen.values()].sort((x, y) => x.km - y.km).map(({ d, ...l }) => l));
+    }
     // stops in order: take km of their node, searching forward
     routeRes.stopNodes.forEach((n, i) => { if (n !== null && nodeKm.has(n)) stopKm[i] = nodeKm.get(n); });
     stopKm[routeRes.stopNodes.findIndex((n) => n !== null)] = 0;
@@ -89,6 +113,7 @@ export function buildTrip(graph, routeRes, stops, meta = {}) {
     lat, lon, cum,
     tunnels, speeds,
     stops: tripStops,
+    landmarks,
     profile,
     skipped: routeRes.skipped.map((i) => stops[i].name),
   };

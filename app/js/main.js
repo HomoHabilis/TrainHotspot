@@ -241,7 +241,7 @@ async function buildAndOpen({ stops, title, avoidHighSpeed, source, train }) {
     });
     const res = graph.route(routeStops, { avoidHighSpeed });
     const trip = buildTrip(graph, res, routeStops.map((s) => ({ name: s.name, arr: s.arr, dep: s.dep, code: s.code })),
-      { title, source, train, departure: stops[0].dep });
+      { title, source, train, departure: stops[0].dep, stationList: idx.list });
     trip.delayMin = train?.delayMin || 0;
     await saveTrip(trip);
     persistStorage();
@@ -492,8 +492,16 @@ function paintLive(s, est, now) {
 function nearStop(trip, km) {
   let best = trip.stops[0];
   for (const s of trip.stops) if (Math.abs(s.km - km) < Math.abs(best.km - km)) best = s;
-  const d = Math.abs(best.km - km);
-  return d < 3 ? best.name : d < 25 ? `near ${best.name}` : `km ${Math.round(km)}`;
+  if (Math.abs(best.km - km) < 3) return best.name;
+  // otherwise the nearest station passed (major stations preferred)
+  let lm = null, ld = Infinity;
+  for (const l of trip.landmarks || []) {
+    const d = Math.abs(l.km - km) * (l.major ? 0.5 : 1);
+    if (d < ld) { ld = d; lm = l; }
+  }
+  const sd = Math.abs(best.km - km);
+  if (lm && ld < sd && ld < 15) return lm.on && Math.abs(lm.km - km) < 2 ? lm.name : `near ${lm.name}`;
+  return sd < 15 ? `near ${best.name}` : `km ${Math.round(km)}`;
 }
 
 // Linear trip outline: time axis, colored segments, stops, current position
@@ -502,20 +510,27 @@ function outlineSvg(trip, cov, km, pt, showPos) {
   const t0 = pt(0), t1 = pt(trip.lengthKm), span = (t1 - t0) || 1;
   const x = (k) => X0 + ((pt(k) - t0) / span) * (X1 - X0);
   const rects = cov.segments.map((s) => `<rect class="seg-${s.kind}" x="${x(s.s).toFixed(1)}" y="${Y}" width="${Math.max(1.2, x(s.e) - x(s.s)).toFixed(1)}" height="${BH}"><title>${s.kind === 'bad' ? 'No network' : s.kind === 'good' ? 'Good network' : 'Short gap'}: ${hhmm(pt(s.s))}–${hhmm(pt(s.e))}</title></rect>`).join('');
-  // stop ticks; label first/last always, others when room
-  let lastLabelX = -1e9;
+  // ticks for stops; labels for stops then major stations passed, wherever they fit
   const n = trip.stops.length;
-  const stops = trip.stops.map((s, i) => {
-    const sx = x(s.km);
-    let label = '';
-    const edge = i === 0 || i === n - 1;
-    if (edge || (sx - lastLabelX > 150 && X1 - sx > 150 && sx - X0 > 150)) {
-      const anchor = i === 0 ? 'start' : i === n - 1 ? 'end' : 'middle';
-      label = `<text x="${sx.toFixed(1)}" y="${Y + BH + 26}" text-anchor="${anchor}" class="st-name">${esc(short(s.name))}</text><text x="${sx.toFixed(1)}" y="${Y + BH + 48}" text-anchor="${anchor}" class="st-time">${hhmm(i === 0 ? pt(s.km) : (pt(s.km)))}</text>`;
-      lastLabelX = sx;
-    }
-    return `<line x1="${sx.toFixed(1)}" x2="${sx.toFixed(1)}" y1="${Y - 4}" y2="${Y + BH + 6}" class="st-tick"/>${label}`;
-  }).join('');
+  const ticks = trip.stops.map((s) => { const sx = x(s.km); return `<line x1="${sx.toFixed(1)}" x2="${sx.toFixed(1)}" y1="${Y - 4}" y2="${Y + BH + 6}" class="st-tick"/>`; }).join('');
+  const stopNames = new Set(trip.stops.map((s) => s.name));
+  const cands = [
+    ...trip.stops.map((s, i) => ({ name: s.name, km: s.km, pri: i === 0 || i === n - 1 ? 0 : 1, cls: '' })),
+    ...(trip.landmarks || []).filter((l) => l.major && !stopNames.has(l.name)).map((l) => ({ name: l.name, km: l.km, pri: 2 - (l.rank || 0) / 1000, cls: ' lm' })),
+  ].sort((a, b) => a.pri - b.pri);
+  const used = [];
+  const labels = [];
+  for (const c of cands) {
+    const label = short(c.name), wdt = label.length * 12.5 + 10;
+    const cx = x(c.km);
+    let x0 = cx - wdt / 2, anchor = 'middle';
+    if (c.km <= 0.01) { x0 = cx; anchor = 'start'; } else if (c.km >= trip.lengthKm - 0.01) { x0 = cx - wdt; anchor = 'end'; }
+    if (x0 < X0 - 2 || x0 + wdt > X1 + 2) continue;
+    if (used.some(([a0, b0]) => x0 < b0 && x0 + wdt > a0)) continue;
+    used.push([x0, x0 + wdt]);
+    labels.push(`${c.cls ? `<line x1="${cx.toFixed(1)}" x2="${cx.toFixed(1)}" y1="${Y + BH}" y2="${Y + BH + 8}" class="lm-tick"/>` : ''}<text x="${cx.toFixed(1)}" y="${Y + BH + 26}" text-anchor="${anchor}" class="st-name${c.cls}">${esc(label)}</text><text x="${cx.toFixed(1)}" y="${Y + BH + 48}" text-anchor="${anchor}" class="st-time">${hhmm(pt(c.km))}</text>`);
+  }
+  const stops = ticks + labels.join('');
   const px = x(Math.min(km, trip.lengthKm));
   const pos = showPos ? `<g class="pos"><line x1="${px}" x2="${px}" y1="${Y - 14}" y2="${Y + BH + 2}"/><path d="M${px - 11},${Y - 28} L${px + 11},${Y - 28} L${px},${Y - 12} Z"/></g>` : '';
   return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Trip outline with network coverage">${rects}${stops}${pos}</svg>`;
