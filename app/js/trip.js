@@ -265,6 +265,33 @@ export function computeCoverage(trip, settings) {
   return { segments, goodPct: (100 * goodMs) / total, coveredPct: (100 * okMs) / total };
 }
 
+/**
+ * Trip grade, A (best) to F. Coverage share alone is misleading: 90% with a tunnel every
+ * 10 minutes is worse to work with than 80% with one long gap. So the score multiplies the
+ * covered share by a continuity factor based on the typical uninterrupted stretch: the
+ * time-weighted mean length of the stretches with network (the length of the stretch you
+ * are in at a random moment). Stretches of 30 min or more (or half the trip, for short
+ * trips) count as fully continuous.
+ * -> { grade, score, typicalMs, interruptions }
+ */
+export function computeGrade(cov) {
+  const segs = cov.segments;
+  if (!segs.length) return { grade: 'F', score: 0, typicalMs: 0, interruptions: 0 };
+  const total = segs[segs.length - 1].te - segs[0].ts || 1;
+  let sum = 0, sumSq = 0, interruptions = 0;
+  for (const sg of segs) {
+    const d = sg.te - sg.ts;
+    if (sg.kind === 'bad') { interruptions++; continue; }
+    sum += d; sumSq += d * d;
+  }
+  const typicalMs = sum ? sumSq / sum : 0;
+  const target = Math.min(30 * 60000, total / 2);
+  const continuity = Math.min(1, typicalMs / target);
+  const score = cov.coveredPct * (0.4 + 0.6 * continuity);
+  const grade = score >= 85 ? 'A' : score >= 70 ? 'B' : score >= 55 ? 'C' : score >= 40 ? 'D' : score >= 25 ? 'E' : 'F';
+  return { grade, score, typicalMs, interruptions };
+}
+
 export const DEFAULT_SETTINGS = {
   minGoodMin: 5,      // a "good" window lasts at least this long
   minTunnelM: 200,    // tunnels shorter than this are ignored
@@ -273,4 +300,5 @@ export const DEFAULT_SETTINGS = {
   mergeGapM: 300,     // tunnels closer than this are one zone
   leadMin: 1,         // alert this long before a no-network zone
   notify: true,
+  lang: 'auto',       // 'auto' follows the phone or browser language
 };

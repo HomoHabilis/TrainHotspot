@@ -1,6 +1,7 @@
 // Train lookup through Transitous (https://transitous.org), a free, community-run
 // public transport API that browsers can call directly. Italian rail data includes
 // Trenitalia (via BusOne, non-commercial use) and Trenord. Italo is not included.
+import { t } from './i18n.js';
 const API = 'https://api.transitous.org/api';
 const RAIL = 'HIGHSPEED_RAIL,LONG_DISTANCE,REGIONAL_RAIL,REGIONAL_FAST_RAIL,NIGHT_RAIL,SUBURBAN,RAIL';
 
@@ -8,9 +9,9 @@ async function get(path, params) {
   const url = API + path + '?' + new URLSearchParams(params).toString();
   let r;
   try { r = await fetch(url); } catch {
-    throw new Error('Could not reach the timetable service. Check your connection, or use the Stations tab.');
+    throw new Error(t('e.reach'));
   }
-  if (!r.ok) throw new Error('Timetable service error ' + r.status);
+  if (!r.ok) throw new Error(t('e.service', { s: r.status }));
   return r.json();
 }
 
@@ -21,7 +22,7 @@ async function findStop(station) {
   const dist = (s) => (s.lat - station.la) ** 2 + ((s.lon - station.lo) * Math.cos((station.la * Math.PI) / 180)) ** 2;
   rail.sort((a, b) => dist(a) - dist(b));
   const best = rail[0];
-  if (!best || Math.sqrt(dist(best)) * 111 > 3) throw new Error(`No timetable stop found for ${station.n}.`);
+  if (!best || Math.sqrt(dist(best)) * 111 > 3) throw new Error(t('e.nostop', { s: station.n }));
   return best.id;
 }
 
@@ -64,7 +65,7 @@ export async function findTrain(num, dateStr, station) {
 export async function tripDetails(tripId) {
   const it = await get('/v5/trip', { tripId });
   const leg = it.legs?.[0];
-  if (!leg) throw new Error('No details for this train.');
+  if (!leg) throw new Error(t('e.nodetails'));
   const places = [leg.from, ...(leg.intermediateStops || []), leg.to];
   const ms = (s) => (s ? Date.parse(s) : null);
   const stops = places.map((p, i) => ({

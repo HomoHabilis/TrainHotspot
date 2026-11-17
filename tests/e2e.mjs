@@ -96,9 +96,35 @@ try {
     await page.waitForSelector('input', { timeout: 10000 });
   });
 
-  await step('trip list shows both trips', async () => {
+  await step('trip list shows both trips with a grade', async () => {
     await page.goto(BASE + '#/');
-    await page.waitForFunction(() => document.querySelectorAll('.triplist li').length >= 2, null, { timeout: 10000 });
+    await page.waitForFunction(() => document.querySelectorAll('.triplist li .grade').length >= 2, null, { timeout: 10000 });
+  });
+
+  await step('Italian phone gets the Italian interface, and the language can be changed', async () => {
+    const it = await browser.newContext({ viewport: { width: 390, height: 844 }, serviceWorkers: 'block', locale: 'it-IT' });
+    const p2 = await it.newPage();
+    p2.on('pageerror', (e) => errors.push('pageerror (it): ' + e.message));
+    await p2.goto(BASE);
+    await p2.waitForSelector('.hero h1');
+    const h = await p2.textContent('.hero h1');
+    if (!/rete/.test(h)) throw new Error('hero not in Italian: ' + h);
+    if (await p2.getAttribute('html', 'lang') !== 'it') throw new Error('html lang not it');
+    await p2.goto(BASE + '#/new');
+    await p2.click('[data-tab=stations]');
+    await p2.fill('[name=from]', 'Firenze Santa Maria Novella');
+    await p2.fill('[name=to]', 'Bologna Centrale');
+    await p2.fill('[name=dep]', '10:00');
+    await p2.click('#f-st button[type=submit]');
+    await p2.waitForSelector('#grade-badge .grade', { timeout: 30000 });
+    const g = await p2.textContent('#grade');
+    if (!/interruzion/.test(g)) throw new Error('grade line not in Italian: ' + g);
+    await p2.goto(BASE + '#/settings');
+    await p2.selectOption('select[name=lang]', 'de');
+    await p2.click('#f-set button[type=submit]');
+    await p2.goto(BASE + '#/');
+    await p2.waitForFunction(() => /Netz/.test(document.querySelector('.hero h1')?.textContent || ''), null, { timeout: 10000 });
+    await it.close();
   });
 } finally {
   await browser.close();
