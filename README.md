@@ -6,7 +6,7 @@ A Progressive Web App that tells you, for your train trip in Italy, where you'll
 
 ## What it does
 
-- **Plan a trip** by train number (live lookup on ViaggiaTreno, from your browser) or by stations and times.
+- **Plan a trip** by train number (Trenitalia and Trenord, looked up on [Transitous](https://transitous.org) from your browser) or by stations and times.
 - **Trip outline:** a line of your trip in green (good network for at least 5 minutes), amber (short gaps) and red (probably no network: tunnels), with the percentage of the trip with coverage.
 - **Coverage times:** the list of clock times when you'll have a good window, refreshed about once a minute from your GPS position, speed and delay.
 - **Works offline** once the trip is loaded: the trip is stored on the device.
@@ -28,7 +28,7 @@ Reliable background alerts need a native wrapper (e.g. Capacitor) with scheduled
 ## Data
 
 - Tracks, tunnels, line speeds and stations: © [OpenStreetMap](https://www.openstreetmap.org/copyright) contributors, ODbL 1.0. Built monthly by `.github/workflows/build-data.yml` (`tools/build_rail_data.py`) into `app/data/`.
-- Train stops and times: ViaggiaTreno, queried live from the user's browser for their own train. Nothing is stored or redistributed.
+- Train stops and times: [Transitous](https://transitous.org) API, called from the user's browser ([data sources](https://transitous.org/sources/); Trenitalia data via BusOne, non-commercial use only). ViaggiaTreno can't be used because it refuses browser requests from other sites. Italo is not covered.
 - Coverage is estimated from tunnels only; valleys and rural gaps are not modelled yet.
 
 ## Development

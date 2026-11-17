@@ -37,6 +37,18 @@ export class StationIndex {
     return out;
   }
 
+  // Nearest station to a point, within maxM metres
+  nearest(lat, lon, maxM = 600) {
+    let best = null, bd = Infinity;
+    const k = Math.cos((lat * Math.PI) / 180);
+    for (const s of this.list) {
+      const dy = (s.la - lat) * 111320, dx = (s.lo - lon) * 111320 * k;
+      const d = dx * dx + dy * dy;
+      if (d < bd) { bd = d; best = s; }
+    }
+    return best && Math.sqrt(bd) <= maxM ? best : null;
+  }
+
   byName(name) {
     const n = norm(name);
     return this.list.find((s) => s._n === n) || null;
