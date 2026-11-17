@@ -119,7 +119,7 @@ function renderNew() {
         <label>Getting on at <input name="board" list="stlist" required autocomplete="off" placeholder="Your departure station"></label>
         <label>Getting off at <input name="alight" list="stlist" autocomplete="off" placeholder="Optional: end of the line if empty"></label>
         <button class="btn primary" type="submit">Find train</button>
-        <p class="muted small">Stops and times come from <a href="https://transitous.org" target="_blank" rel="noopener">Transitous</a> (Trenitalia and Trenord trains; Italo not available). Needs network now, not during the trip.</p>
+        <p class="muted small">Stops and times come from <a href="https://transitous.org" target="_blank" rel="noopener">Transitous</a> (<a href="https://transitous.org/sources/" target="_blank" rel="noopener">data sources</a>): Trenitalia and Trenord trains, Italo not available. Needs network now, not during the trip.</p>
       </form>
       <div id="train-results"></div>
     </section>
@@ -572,7 +572,8 @@ function renderSettings() {
     </form>
     <section class="card small">
       <h2>About the data</h2>
-      <p>Tracks and tunnels come from OpenStreetMap (© OpenStreetMap contributors, ODbL), refreshed monthly. Train stops and times come from <a href="https://transitous.org">Transitous</a> when you look up a train number (Trenitalia data via BusOne, for non-commercial use). Nothing is sent to any TrainHotspot server: there is none.</p>
+      <p>Tracks and tunnels come from OpenStreetMap (© OpenStreetMap contributors, ODbL), refreshed monthly. Train stops and times come from <a href="https://transitous.org">Transitous</a> when you look up a train number (<a href="https://transitous.org/sources/">data sources</a>; Trenitalia data via BusOne, for non-commercial use). Nothing is sent to any TrainHotspot server: there is none.</p>
+      <p>Open-source, non-commercial project. Feedback and contact: <a href="https://github.com/HomoHabilis/TrainHotspot/issues">GitHub issues</a>.</p>
       <p>"No network" zones are estimated from tunnels. Some tunnels have repeaters, and some open stretches (deep valleys, rural areas) have poor signal; those are not yet taken into account.</p>
     </section>`;
   const form = $view.querySelector('#f-set');
