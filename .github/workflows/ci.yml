@@ -1,0 +1,41 @@
+name: CI
+
+# Tests the app on every pull request commit, and before every deploy
+# (deploy-pages.yml calls this workflow and only deploys if it passes).
+on:
+  pull_request:
+  workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Syntax check
+        run: |
+          for f in app/js/*.js app/sw.js; do node --check "$f"; done
+          node -e "for (const f of ['app/manifest.webmanifest','app/data/graph.json','app/data/stations.json']) { try { JSON.parse(require('fs').readFileSync(f)); } catch (e) { if (e.code !== 'ENOENT') throw new Error(f + ': ' + e.message); } }"
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Install browser
+        run: |
+          npm install --no-audit --no-fund
+          npx playwright install --with-deps chromium
+
+      - name: Browser smoke test
+        run: npm run test:e2e
