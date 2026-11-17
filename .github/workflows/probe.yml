@@ -18,6 +18,17 @@ jobs:
             curl -sS -m 30 -o st.json -w "stoptimes $v: %{http_code}\n" "$A/$v/stoptimes?stopId=$QID&n=40"
             if python3 -c "import json;json.load(open('st.json'))['stopTimes']" 2>/dev/null; then break; fi
           done
+          curl -sS -m 30 -o st2.json -w "filtered: %{http_code}\n" "$A/v5/stoptimes?stopId=$QID&n=100&time=2026-11-18T05:00:00Z&mode=HIGHSPEED_RAIL,LONG_DISTANCE,REGIONAL_RAIL,REGIONAL_FAST_RAIL,NIGHT_RAIL,SUBURBAN&exactRadius=false&radius=200"
+          python3 -c "
+          import json;d=json.load(open('st2.json'));print('keys',list(d.keys()));print(len(d.get('stopTimes',[])), 'next', d.get('nextPageCursor'))
+          for s in d.get('stopTimes',[])[:8]: print(s['displayName'], s.get('tripShortName'), s['mode'], s['place'].get('scheduledDeparture'), s['place'].get('stopId'), s.get('realTime'))
+          tid=[s['tripId'] for s in d['stopTimes'] if s.get('agencyName')=='TRENITALIA'][0]; open('tid','w').write(tid)"
+          curl -sS -m 30 -o trip.json -G --data-urlencode "tripId=$(cat tid)" "$A/v5/trip"
+          python3 -c "
+          import json;d=json.load(open('trip.json'));print('trip keys',list(d.keys()))
+          leg=d['legs'][0];print('leg keys',list(leg.keys()))
+          print('from',json.dumps(leg['from'])[:600]);print('n inter',len(leg.get('intermediateStops',[])))
+          print('inter0',json.dumps(leg.get('intermediateStops',[{}])[0])[:600]);print('to',json.dumps(leg['to'])[:400])"
           python3 - <<'PY'
           import json
           d = json.load(open('st.json'))
