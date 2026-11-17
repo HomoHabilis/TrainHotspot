@@ -8,7 +8,8 @@ on:
     - cron: "17 3 1 * *"
   push:
     paths:
-      - "tools/**"
+      - "tools/build_rail_data.py"
+      - "tools/fetch_vt_stations.py"
       - ".github/workflows/build-data.yml"
 
 permissions:
@@ -48,7 +49,7 @@ jobs:
 
       - name: Download and filter OSM Italy extract
         run: |
-          curl -sSL --retry 3 -o italy.osm.pbf https://download.geofabrik.de/europe/italy-latest.osm.pbf
+          curl -fsSL --retry 5 --retry-all-errors --retry-delay 30 -o italy.osm.pbf https://download.geofabrik.de/europe/italy-latest.osm.pbf
           osmium tags-filter italy.osm.pbf w/railway=rail n/railway=station,halt -o rail.osm.pbf --overwrite
           ls -lh italy.osm.pbf rail.osm.pbf
           rm italy.osm.pbf
