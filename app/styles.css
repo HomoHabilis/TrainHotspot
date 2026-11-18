@@ -165,3 +165,9 @@ select {
   font: inherit; padding: .5rem .6rem; border: 1px solid var(--line); border-radius: 10px;
   background: var(--bg); color: var(--fg); min-height: 44px; max-width: 220px;
 }
+
+/* Tunnels with mobile antennas (high-speed lines): counted as covered, shown as a blue band */
+.seg-ant { fill: #3b82c4; background: #3b82c4; }
+.legend .sw.seg-ant { background: linear-gradient(var(--good) 30%, #3b82c4 30% 70%, var(--good) 70%); }
+.hs-note { margin: .5rem 0 0; }
+.ant { color: #3b82c4; font-weight: 600; }

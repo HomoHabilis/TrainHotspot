@@ -102,7 +102,8 @@ async function renderHome() {
 function miniBar(trip, cov) {
   const L = trip.lengthKm || 1;
   return `<svg class="minibar" viewBox="0 0 100 4" preserveAspectRatio="none" aria-hidden="true">${cov.segments.map((s) =>
-    `<rect x="${(100 * s.s) / L}" y="0" width="${Math.max(0.15, (100 * (s.e - s.s)) / L)}" height="4" class="seg-${s.kind}"/>`).join('')}</svg>`;
+    `<rect x="${(100 * s.s) / L}" y="0" width="${Math.max(0.15, (100 * (s.e - s.s)) / L)}" height="4" class="seg-${s.kind}"/>`).join('')}${(cov.antennas || []).map((a) =>
+    `<rect x="${(100 * a.s) / L}" y="1" width="${Math.max(0.15, (100 * (a.e - a.s)) / L)}" height="2" class="seg-ant"/>`).join('')}</svg>`;
 }
 
 // ---------- new trip ----------
@@ -291,7 +292,8 @@ async function renderTrip(id) {
       <div id="pct" class="pct"></div>
       <p id="grade" class="grade-line small"></p>
       <div id="outline" class="outline"></div>
-      <div class="legend"><span><i class="sw seg-good"></i>${t('lg.good', { n: settings.minGoodMin })}</span><span><i class="sw seg-short"></i>${t('lg.short')}</span><span><i class="sw seg-bad"></i>${t('lg.bad')}</span></div>
+      <div class="legend"><span><i class="sw seg-good"></i>${t('lg.good', { n: settings.minGoodMin })}</span><span><i class="sw seg-short"></i>${t('lg.short')}</span><span><i class="sw seg-bad"></i>${t('lg.bad')}</span>${live.coverage.antennas.length ? `<span><i class="sw seg-ant"></i>${t('lg.ant')}</span>` : ''}</div>
+      ${trip.tunnels.some((tu) => tu.hs) ? `<p class="small muted hs-note">📶 ${settings.hsTunnelsCovered ? t('hs.note.on') : t('hs.note.off')}</p>` : ''}
     </section>
     <section class="card">
       <h2>${t('windows')}</h2>
@@ -347,7 +349,7 @@ async function renderTrip(id) {
   $view.querySelector('#b-sim').addEventListener('click', () => { L.toggleSim(); paintControls(); });
 
   $view.querySelector('#stops').innerHTML = trip.stops.map((s, i) => `<li><span class="t">${s.arr && i ? hhmm(s.arr) : ''}${s.dep && i < trip.stops.length - 1 ? (i ? ' – ' : '') + hhmm(s.dep) : ''}</span> ${esc(s.name)} <span class="muted">km ${Math.round(s.km)}</span></li>`).join('');
-  $view.querySelector('#tunnels').innerHTML = trip.tunnels.map((tu) => `<li><span class="t">${hhmm(timeAtKm(trip.profile, tu.s))}</span> ${esc(tu.name || t('tunnel'))} <span class="muted">${((tu.e - tu.s) * 1000) >= 1000 ? (tu.e - tu.s).toFixed(1) + ' km' : Math.round((tu.e - tu.s) * 1000) + ' m'} · km ${tu.s.toFixed(1)}</span></li>`).join('') || `<li class="muted">${t('notunnels')}</li>`;
+  $view.querySelector('#tunnels').innerHTML = trip.tunnels.map((tu) => `<li><span class="t">${hhmm(timeAtKm(trip.profile, tu.s))}</span> ${esc(tu.name || t('tunnel'))}${tu.hs ? ` · <span class="ant">${t('tu.ant')}</span>` : ''} <span class="muted">${((tu.e - tu.s) * 1000) >= 1000 ? (tu.e - tu.s).toFixed(1) + ' km' : Math.round((tu.e - tu.s) * 1000) + ' m'} · km ${tu.s.toFixed(1)}</span></li>`).join('') || `<li class="muted">${t('notunnels')}</li>`;
   paintControls();
   L.refresh(true);
 }
@@ -555,7 +557,7 @@ function outlineSvg(trip, cov, km, pt, showPos) {
   const W = 600, H = 116, X0 = 8, X1 = W - 8, Y = 30, BH = 30;
   const t0 = pt(0), t1 = pt(trip.lengthKm), span = (t1 - t0) || 1;
   const x = (k) => X0 + ((pt(k) - t0) / span) * (X1 - X0);
-  const rects = cov.segments.map((s) => `<rect class="seg-${s.kind}" x="${x(s.s).toFixed(1)}" y="${Y}" width="${Math.max(1.2, x(s.e) - x(s.s)).toFixed(1)}" height="${BH}"><title>${t('seg.' + s.kind)}: ${hhmm(pt(s.s))}–${hhmm(pt(s.e))}</title></rect>`).join('');
+  const rects = cov.segments.map((s) => `<rect class="seg-${s.kind}" x="${x(s.s).toFixed(1)}" y="${Y}" width="${Math.max(1.2, x(s.e) - x(s.s)).toFixed(1)}" height="${BH}"><title>${t('seg.' + s.kind)}: ${hhmm(pt(s.s))}–${hhmm(pt(s.e))}</title></rect>`).join('') + (cov.antennas || []).map((a) => `<rect class="seg-ant" x="${x(a.s).toFixed(1)}" y="${Y + BH * 0.3}" width="${Math.max(1.2, x(a.e) - x(a.s)).toFixed(1)}" height="${BH * 0.4}"><title>${t('seg.ant')}: ${hhmm(pt(a.s))}–${hhmm(pt(a.e))}</title></rect>`).join('');
   // ticks for stops; labels for stops then major stations passed, wherever they fit
   const n = trip.stops.length;
   const ticks = trip.stops.map((s) => { const sx = x(s.km); return `<line x1="${sx.toFixed(1)}" x2="${sx.toFixed(1)}" y1="${Y - 4}" y2="${Y + BH + 6}" class="st-tick"/>`; }).join('');
@@ -602,6 +604,7 @@ function renderSettings() {
       ${f('marginBeforeS', t('s.before'), 's', 0, 120, 5, '')}
       ${f('marginAfterS', t('s.after'), 's', 0, 180, 5, '')}
       ${f('mergeGapM', t('s.merge'), 'm', 0, 3000, 50, t('s.merge.h'))}
+      <label class="check"><input type="checkbox" name="hsTunnelsCovered" ${settings.hsTunnelsCovered ? 'checked' : ''}> ${t('s.hs')}</label>
       <label class="check"><input type="checkbox" name="notify" ${settings.notify ? 'checked' : ''}> ${t('s.notify')}</label>
       <div class="btnrow"><button class="btn primary" type="submit">${t('save')}</button><button class="btn" type="button" id="reset">${t('defaults')}</button></div>
     </form>
@@ -622,6 +625,7 @@ function renderSettings() {
       const v = Number(form[k].value); if (Number.isFinite(v)) settings[k] = v;
     }
     settings.notify = form.notify.checked;
+    settings.hsTunnelsCovered = form.hsTunnelsCovered.checked;
     settings.lang = form.lang.value;
     setLang(settings.lang); translateChrome();
     saveSettings(settings); toast(t('saved')); history.back();

@@ -178,7 +178,13 @@ const STRINGS = {
   "e.reach": "Could not reach the timetable service. Check your connection, or use the Stations tab.",
   "e.service": "Timetable service error {s}",
   "e.nostop": "No timetable stop found for {s}.",
-  "e.nodetails": "No details for this train."
+  "e.nodetails": "No details for this train.",
+  "lg.ant": "Tunnel with antennas (signal likely)",
+  "seg.ant": "Tunnel with antennas",
+  "tu.ant": "antennas",
+  "hs.note.on": "Tunnels on high-speed lines have mobile antennas, so they count as covered (signal may be weaker). Onboard Wi-Fi uses the same mobile network.",
+  "hs.note.off": "Tunnels on high-speed lines may have mobile antennas, but they count as no network (see Settings). Onboard Wi-Fi uses the same mobile network.",
+  "s.hs": "Count tunnels on high-speed lines as covered (they have mobile antennas)"
  },
  "it": {
   "online": "online",
@@ -355,7 +361,13 @@ const STRINGS = {
   "e.reach": "Impossibile raggiungere il servizio orari. Controlla la connessione o usa la scheda Stazioni.",
   "e.service": "Errore del servizio orari {s}",
   "e.nostop": "Nessuna fermata trovata nell'orario per {s}.",
-  "e.nodetails": "Nessun dettaglio per questo treno."
+  "e.nodetails": "Nessun dettaglio per questo treno.",
+  "lg.ant": "Galleria con antenne (segnale probabile)",
+  "seg.ant": "Galleria con antenne",
+  "tu.ant": "antenne",
+  "hs.note.on": "Le gallerie delle linee AV hanno antenne per la rete mobile, quindi contano come coperte (il segnale può essere più debole). Il Wi-Fi di bordo usa la stessa rete mobile.",
+  "hs.note.off": "Le gallerie delle linee AV possono avere antenne per la rete mobile, ma contano come senza rete (vedi Impostazioni). Il Wi-Fi di bordo usa la stessa rete mobile.",
+  "s.hs": "Considera coperte le gallerie delle linee AV (hanno antenne per la rete mobile)"
  },
  "fr": {
   "online": "en ligne",
@@ -532,7 +544,13 @@ const STRINGS = {
   "e.reach": "Impossible de joindre le service d'horaires. Vérifiez votre connexion ou utilisez l'onglet Gares.",
   "e.service": "Erreur du service d'horaires {s}",
   "e.nostop": "Aucun arrêt trouvé dans les horaires pour {s}.",
-  "e.nodetails": "Aucun détail pour ce train."
+  "e.nodetails": "Aucun détail pour ce train.",
+  "lg.ant": "Tunnel avec antennes (signal probable)",
+  "seg.ant": "Tunnel avec antennes",
+  "tu.ant": "antennes",
+  "hs.note.on": "Les tunnels des lignes à grande vitesse ont des antennes mobiles : ils comptent comme couverts (le signal peut être plus faible). Le Wi-Fi à bord passe par le même réseau mobile.",
+  "hs.note.off": "Les tunnels des lignes à grande vitesse peuvent avoir des antennes mobiles, mais ils comptent comme sans réseau (voir Réglages). Le Wi-Fi à bord passe par le même réseau mobile.",
+  "s.hs": "Compter les tunnels des lignes à grande vitesse comme couverts (ils ont des antennes mobiles)"
  },
  "es": {
   "online": "en línea",
@@ -709,7 +727,13 @@ const STRINGS = {
   "e.reach": "No se pudo contactar con el servicio de horarios. Revisa tu conexión o usa la pestaña Estaciones.",
   "e.service": "Error del servicio de horarios {s}",
   "e.nostop": "No se encontró ninguna parada en el horario para {s}.",
-  "e.nodetails": "No hay detalles para este tren."
+  "e.nodetails": "No hay detalles para este tren.",
+  "lg.ant": "Túnel con antenas (señal probable)",
+  "seg.ant": "Túnel con antenas",
+  "tu.ant": "antenas",
+  "hs.note.on": "Los túneles de las líneas de alta velocidad tienen antenas de telefonía, así que cuentan como cubiertos (la señal puede ser más débil). El Wi-Fi a bordo usa la misma red móvil.",
+  "hs.note.off": "Los túneles de las líneas de alta velocidad pueden tener antenas de telefonía, pero cuentan como sin cobertura (ver Ajustes). El Wi-Fi a bordo usa la misma red móvil.",
+  "s.hs": "Contar como cubiertos los túneles de alta velocidad (tienen antenas de telefonía)"
  },
  "pt": {
   "online": "online",
@@ -886,7 +910,13 @@ const STRINGS = {
   "e.reach": "Não foi possível contactar o serviço de horários. Verifique a ligação ou use o separador Estações.",
   "e.service": "Erro do serviço de horários {s}",
   "e.nostop": "Nenhuma paragem encontrada no horário para {s}.",
-  "e.nodetails": "Sem detalhes para este comboio."
+  "e.nodetails": "Sem detalhes para este comboio.",
+  "lg.ant": "Túnel com antenas (sinal provável)",
+  "seg.ant": "Túnel com antenas",
+  "tu.ant": "antenas",
+  "hs.note.on": "Os túneis das linhas de alta velocidade têm antenas de rede móvel, por isso contam como cobertos (o sinal pode ser mais fraco). O Wi-Fi a bordo usa a mesma rede móvel.",
+  "hs.note.off": "Os túneis das linhas de alta velocidade podem ter antenas de rede móvel, mas contam como sem rede (ver Definições). O Wi-Fi a bordo usa a mesma rede móvel.",
+  "s.hs": "Contar como cobertos os túneis de alta velocidade (têm antenas de rede móvel)"
  },
  "de": {
   "online": "online",
@@ -1063,7 +1093,13 @@ const STRINGS = {
   "e.reach": "Der Fahrplandienst ist nicht erreichbar. Prüfe deine Verbindung oder nutze den Tab Bahnhöfe.",
   "e.service": "Fehler des Fahrplandienstes {s}",
   "e.nostop": "Keine Haltestelle im Fahrplan für {s} gefunden.",
-  "e.nodetails": "Keine Details zu diesem Zug."
+  "e.nodetails": "Keine Details zu diesem Zug.",
+  "lg.ant": "Tunnel mit Antennen (Signal wahrscheinlich)",
+  "seg.ant": "Tunnel mit Antennen",
+  "tu.ant": "Antennen",
+  "hs.note.on": "Tunnel auf Schnellfahrstrecken haben Mobilfunkantennen und zählen daher als versorgt (das Signal kann schwächer sein). Das WLAN im Zug nutzt dasselbe Mobilfunknetz.",
+  "hs.note.off": "Tunnel auf Schnellfahrstrecken haben möglicherweise Mobilfunkantennen, zählen aber als ohne Netz (siehe Einstellungen). Das WLAN im Zug nutzt dasselbe Mobilfunknetz.",
+  "s.hs": "Tunnel auf Schnellfahrstrecken als versorgt zählen (sie haben Mobilfunkantennen)"
  }
 };
 

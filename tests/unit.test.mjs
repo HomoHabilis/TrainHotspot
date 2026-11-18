@@ -213,8 +213,14 @@ test('real data: Firenze to Bologna takes the high-speed tunnels', () => {
   assert.ok(trip.lengthKm > 80 && trip.lengthKm < 110, `length ${trip.lengthKm}`);
   const tunnelKm = trip.tunnels.reduce((a, t) => a + t.e - t.s, 0);
   assert.ok(tunnelKm > 40, `tunnel km ${tunnelKm}`);
-  const cov = computeCoverage(trip, DEFAULT_SETTINGS);
-  assert.ok(cov.goodPct < 50, `goodPct ${cov.goodPct}`);
+  assert.ok(trip.tunnels.some((tu) => tu.hs), 'tunnels are on a high-speed line');
+  const noAntennas = computeCoverage(trip, { ...DEFAULT_SETTINGS, hsTunnelsCovered: false });
+  assert.ok(noAntennas.goodPct < 50, `goodPct ${noAntennas.goodPct}`);
+  assert.equal(noAntennas.antennas.length, 0);
+  const withAntennas = computeCoverage(trip, DEFAULT_SETTINGS);
+  assert.ok(withAntennas.antennas.length > 0);
+  assert.ok(withAntennas.coveredPct > noAntennas.coveredPct + 30, `${withAntennas.coveredPct} vs ${noAntennas.coveredPct}`);
+  assert.ok(computeGrade(withAntennas).score > computeGrade(noAntennas).score);
 });
 
 test('real data: Milano to Roma routes in one piece', () => {
