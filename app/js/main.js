@@ -293,7 +293,7 @@ async function renderTrip(id) {
       <p id="grade" class="grade-line small"></p>
       <div id="outline" class="outline"></div>
       <div class="legend"><span><i class="sw seg-good"></i>${t('lg.good', { n: settings.minGoodMin })}</span><span><i class="sw seg-short"></i>${t('lg.short')}</span><span><i class="sw seg-bad"></i>${t('lg.bad')}</span>${live.coverage.antennas.length ? `<span><i class="sw seg-ant"></i>${t('lg.ant')}</span>` : ''}</div>
-      ${trip.tunnels.some((tu) => tu.hs) ? `<p class="small muted hs-note">📶 ${settings.hsTunnelsCovered ? t('hs.note.on') : t('hs.note.off')}</p>` : ''}
+      ${trip.tunnels.some((tu) => tu.hs) ? `<p class="small muted hs-note">📶 ${settings.hsTunnelsCovered ? t('hs.note.on') : t('hs.note.off')}</p><p class="small hs-note">🛜 ${t('hs.wifi')}</p>` : ''}
     </section>
     <section class="card">
       <h2>${t('windows')}</h2>

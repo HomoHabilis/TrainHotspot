@@ -182,9 +182,10 @@ const STRINGS = {
   "lg.ant": "Tunnel with antennas (signal likely)",
   "seg.ant": "Tunnel with antennas",
   "tu.ant": "antennas",
-  "hs.note.on": "Tunnels on high-speed lines have mobile antennas, so they count as covered (signal may be weaker). Onboard Wi-Fi uses the same mobile network.",
-  "hs.note.off": "Tunnels on high-speed lines may have mobile antennas, but they count as no network (see Settings). Onboard Wi-Fi uses the same mobile network.",
-  "s.hs": "Count tunnels on high-speed lines as covered (they have mobile antennas)"
+  "hs.note.on": "Tunnels on high-speed lines have mobile antennas, so they count as covered (signal may be weaker).",
+  "hs.note.off": "Tunnels on high-speed lines may have mobile antennas, but they count as no network (see Settings).",
+  "s.hs": "Count tunnels on high-speed lines as covered (they have mobile antennas)",
+  "hs.wifi": "Tip: use the onboard Wi-Fi. Its roof antennas and several combined operators hold the connection far better than a phone inside the carriage at high speed, but it still needs the mobile network, so the zones without network stay the same."
  },
  "it": {
   "online": "online",
@@ -365,9 +366,10 @@ const STRINGS = {
   "lg.ant": "Galleria con antenne (segnale probabile)",
   "seg.ant": "Galleria con antenne",
   "tu.ant": "antenne",
-  "hs.note.on": "Le gallerie delle linee AV hanno antenne per la rete mobile, quindi contano come coperte (il segnale può essere più debole). Il Wi-Fi di bordo usa la stessa rete mobile.",
-  "hs.note.off": "Le gallerie delle linee AV possono avere antenne per la rete mobile, ma contano come senza rete (vedi Impostazioni). Il Wi-Fi di bordo usa la stessa rete mobile.",
-  "s.hs": "Considera coperte le gallerie delle linee AV (hanno antenne per la rete mobile)"
+  "hs.note.on": "Le gallerie delle linee AV hanno antenne per la rete mobile, quindi contano come coperte (il segnale può essere più debole).",
+  "hs.note.off": "Le gallerie delle linee AV possono avere antenne per la rete mobile, ma contano come senza rete (vedi Impostazioni).",
+  "s.hs": "Considera coperte le gallerie delle linee AV (hanno antenne per la rete mobile)",
+  "hs.wifi": "Consiglio: usa il Wi-Fi di bordo. Le antenne sul tetto e più operatori combinati tengono la connessione molto meglio di un telefono dentro la carrozza ad alta velocità, ma serve comunque la rete mobile: le zone senza rete restano le stesse."
  },
  "fr": {
   "online": "en ligne",
@@ -548,9 +550,10 @@ const STRINGS = {
   "lg.ant": "Tunnel avec antennes (signal probable)",
   "seg.ant": "Tunnel avec antennes",
   "tu.ant": "antennes",
-  "hs.note.on": "Les tunnels des lignes à grande vitesse ont des antennes mobiles : ils comptent comme couverts (le signal peut être plus faible). Le Wi-Fi à bord passe par le même réseau mobile.",
-  "hs.note.off": "Les tunnels des lignes à grande vitesse peuvent avoir des antennes mobiles, mais ils comptent comme sans réseau (voir Réglages). Le Wi-Fi à bord passe par le même réseau mobile.",
-  "s.hs": "Compter les tunnels des lignes à grande vitesse comme couverts (ils ont des antennes mobiles)"
+  "hs.note.on": "Les tunnels des lignes à grande vitesse ont des antennes mobiles : ils comptent comme couverts (le signal peut être plus faible).",
+  "hs.note.off": "Les tunnels des lignes à grande vitesse peuvent avoir des antennes mobiles, mais ils comptent comme sans réseau (voir Réglages).",
+  "s.hs": "Compter les tunnels des lignes à grande vitesse comme couverts (ils ont des antennes mobiles)",
+  "hs.wifi": "Conseil : utilisez le Wi-Fi à bord. Ses antennes sur le toit et plusieurs opérateurs combinés tiennent bien mieux la connexion qu'un téléphone dans la voiture à grande vitesse, mais il dépend toujours du réseau mobile : les zones sans réseau restent les mêmes."
  },
  "es": {
   "online": "en línea",
@@ -731,9 +734,10 @@ const STRINGS = {
   "lg.ant": "Túnel con antenas (señal probable)",
   "seg.ant": "Túnel con antenas",
   "tu.ant": "antenas",
-  "hs.note.on": "Los túneles de las líneas de alta velocidad tienen antenas de telefonía, así que cuentan como cubiertos (la señal puede ser más débil). El Wi-Fi a bordo usa la misma red móvil.",
-  "hs.note.off": "Los túneles de las líneas de alta velocidad pueden tener antenas de telefonía, pero cuentan como sin cobertura (ver Ajustes). El Wi-Fi a bordo usa la misma red móvil.",
-  "s.hs": "Contar como cubiertos los túneles de alta velocidad (tienen antenas de telefonía)"
+  "hs.note.on": "Los túneles de las líneas de alta velocidad tienen antenas de telefonía, así que cuentan como cubiertos (la señal puede ser más débil).",
+  "hs.note.off": "Los túneles de las líneas de alta velocidad pueden tener antenas de telefonía, pero cuentan como sin cobertura (ver Ajustes).",
+  "s.hs": "Contar como cubiertos los túneles de alta velocidad (tienen antenas de telefonía)",
+  "hs.wifi": "Consejo: usa el Wi-Fi a bordo. Sus antenas en el techo y varios operadores combinados mantienen la conexión mucho mejor que un teléfono dentro del vagón a alta velocidad, pero sigue necesitando la red móvil: las zonas sin cobertura son las mismas."
  },
  "pt": {
   "online": "online",
@@ -914,9 +918,10 @@ const STRINGS = {
   "lg.ant": "Túnel com antenas (sinal provável)",
   "seg.ant": "Túnel com antenas",
   "tu.ant": "antenas",
-  "hs.note.on": "Os túneis das linhas de alta velocidade têm antenas de rede móvel, por isso contam como cobertos (o sinal pode ser mais fraco). O Wi-Fi a bordo usa a mesma rede móvel.",
-  "hs.note.off": "Os túneis das linhas de alta velocidade podem ter antenas de rede móvel, mas contam como sem rede (ver Definições). O Wi-Fi a bordo usa a mesma rede móvel.",
-  "s.hs": "Contar como cobertos os túneis de alta velocidade (têm antenas de rede móvel)"
+  "hs.note.on": "Os túneis das linhas de alta velocidade têm antenas de rede móvel, por isso contam como cobertos (o sinal pode ser mais fraco).",
+  "hs.note.off": "Os túneis das linhas de alta velocidade podem ter antenas de rede móvel, mas contam como sem rede (ver Definições).",
+  "s.hs": "Contar como cobertos os túneis de alta velocidade (têm antenas de rede móvel)",
+  "hs.wifi": "Dica: use o Wi-Fi a bordo. As antenas no tejadilho e vários operadores combinados mantêm a ligação muito melhor do que um telemóvel dentro da carruagem a alta velocidade, mas continua a precisar da rede móvel: as zonas sem rede são as mesmas."
  },
  "de": {
   "online": "online",
@@ -1097,9 +1102,10 @@ const STRINGS = {
   "lg.ant": "Tunnel mit Antennen (Signal wahrscheinlich)",
   "seg.ant": "Tunnel mit Antennen",
   "tu.ant": "Antennen",
-  "hs.note.on": "Tunnel auf Schnellfahrstrecken haben Mobilfunkantennen und zählen daher als versorgt (das Signal kann schwächer sein). Das WLAN im Zug nutzt dasselbe Mobilfunknetz.",
-  "hs.note.off": "Tunnel auf Schnellfahrstrecken haben möglicherweise Mobilfunkantennen, zählen aber als ohne Netz (siehe Einstellungen). Das WLAN im Zug nutzt dasselbe Mobilfunknetz.",
-  "s.hs": "Tunnel auf Schnellfahrstrecken als versorgt zählen (sie haben Mobilfunkantennen)"
+  "hs.note.on": "Tunnel auf Schnellfahrstrecken haben Mobilfunkantennen und zählen daher als versorgt (das Signal kann schwächer sein).",
+  "hs.note.off": "Tunnel auf Schnellfahrstrecken haben möglicherweise Mobilfunkantennen, zählen aber als ohne Netz (siehe Einstellungen).",
+  "s.hs": "Tunnel auf Schnellfahrstrecken als versorgt zählen (sie haben Mobilfunkantennen)",
+  "hs.wifi": "Tipp: Nutze das WLAN im Zug. Dachantennen und mehrere gebündelte Netzbetreiber halten die Verbindung bei hoher Geschwindigkeit viel besser als ein Handy im Wagen, es braucht aber trotzdem das Mobilfunknetz: Die Zonen ohne Netz bleiben gleich."
  }
 };
 
