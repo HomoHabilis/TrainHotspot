@@ -1,29 +1,31 @@
 import { loadGraph, loadStations } from './graph.js';
-import { buildTrip, computeCoverage, timeAtKm } from './trip.js';
+import { buildTrip, computeCoverage, computeGrade, timeAtKm } from './trip.js';
 import { StationIndex } from './stations.js';
 import { findTrain, tripDetails, currentDelay } from './transitous.js';
 import { Tracker } from './tracker.js';
 import { Alerter, alertPlan, requestNotifications, ScreenLock, KeepAlive, scheduleTriggers, predictedTime } from './alerts.js';
 import { saveTrip, deleteTrip, getTrip, listTrips, loadSettings, saveSettings, persistStorage } from './store.js';
+import { t, setLang, lang, locale, LANGS } from './i18n.js';
 
 const $view = document.getElementById('view');
 const UI_REFRESH_MS = 60000;   // outline, percentages and times
 const ALERT_CHECK_MS = 10000;  // alert checks (browsers throttle this in the background)
 
 let settings = loadSettings();
+setLang(settings.lang);
 let stationIndex = null;
 let live = null; // running trip session
 
 // ---------- helpers ----------
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-const hhmm = (t) => new Date(t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-const dayLabel = (t) => new Date(t).toLocaleDateString([], { weekday: 'short', day: 'numeric', month: 'short' });
+const hhmm = (ms) => new Date(ms).toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' });
+const dayLabel = (ms) => new Date(ms).toLocaleDateString(locale(), { weekday: 'short', day: 'numeric', month: 'short' });
 const mins = (ms) => Math.max(0, Math.round(ms / 60000));
 const fmtDur = (ms) => { const m = mins(ms); return m >= 60 ? `${Math.floor(m / 60)} h ${m % 60} min` : `${m} min`; };
 function toast(msg, ms = 3500) {
-  const t = document.getElementById('toast');
-  t.textContent = msg; t.hidden = false;
-  clearTimeout(toast._t); toast._t = setTimeout(() => { t.hidden = true; }, ms);
+  const el = document.getElementById('toast');
+  el.textContent = msg; el.hidden = false;
+  clearTimeout(toast._t); toast._t = setTimeout(() => { el.hidden = true; }, ms);
 }
 function todayStr(d = new Date()) {
   const z = (n) => String(n).padStart(2, '0');
@@ -38,7 +40,7 @@ async function stations() {
 
 function updateNetState() {
   const el = document.getElementById('netstate');
-  el.textContent = navigator.onLine ? 'online' : 'offline';
+  el.textContent = navigator.onLine ? t('online') : t('offline');
   el.className = 'netstate ' + (navigator.onLine ? 'on' : 'off');
 }
 addEventListener('online', updateNetState);
@@ -56,7 +58,7 @@ async function route() {
     return await renderHome();
   } catch (e) {
     console.error(e);
-    $view.innerHTML = `<section class="card error"><h2>Something went wrong</h2><p>${esc(e.message)}</p><a class="btn" href="#/">Back</a></section>`;
+    $view.innerHTML = `<section class="card error"><h2>${t('wrong')}</h2><p>${esc(e.message)}</p><a class="btn" href="#/">${t('back')}</a></section>`;
   }
 }
 addEventListener('hashchange', route);
@@ -69,29 +71,30 @@ async function renderHome() {
   const standalone = matchMedia('(display-mode: standalone)').matches || navigator.standalone;
   $view.innerHTML = `
     <section class="hero">
-      <h1>Where will your train have network?</h1>
-      <p>Load your trip while online. TrainHotspot then works offline: it shows the stretches without long tunnels, the times you'll have coverage, and alerts you before you lose signal.</p>
-      <a class="btn primary big" href="#/new">Plan a trip</a>
+      <h1>${t('hero.title')}</h1>
+      <p>${t('hero.text')}</p>
+      <a class="btn primary big" href="#/new">${t('plan')}</a>
     </section>
-    ${isIOS && !standalone ? `<section class="card hint"><strong>iPhone tip:</strong> tap Share, then <em>Add to Home Screen</em>. Notifications only work from the installed app.</section>` : ''}
+    ${isIOS && !standalone ? `<section class="card hint">${t('ios.tip')}</section>` : ''}
     <section>
-      <h2 class="section-title">Your trips</h2>
-      ${trips.length ? `<ul class="triplist">${trips.map((t) => {
-        const cov = computeCoverage(t, settings);
-        const past = t.profile.t[t.profile.t.length - 1] < now;
+      <h2 class="section-title">${t('trips')}</h2>
+      ${trips.length ? `<ul class="triplist">${trips.map((tr) => {
+        const cov = computeCoverage(tr, settings);
+        const gr = computeGrade(cov);
+        const past = tr.profile.t[tr.profile.t.length - 1] < now;
         return `<li class="${past ? 'past' : ''}">
-          <a href="#/trip/${encodeURIComponent(t.id)}">
-            <span class="tl-title">${esc(t.title)}</span>
-            <span class="tl-sub">${dayLabel(t.profile.t[0])} · ${hhmm(t.profile.t[0])} → ${hhmm(t.profile.t[t.profile.t.length - 1])} · ${Math.round(t.lengthKm)} km</span>
-            ${miniBar(t, cov)}
-            <span class="tl-cov">${Math.round(cov.coveredPct)}% with network</span>
+          <a href="#/trip/${encodeURIComponent(tr.id)}">
+            <span class="tl-title">${esc(tr.title)}</span>
+            <span class="tl-sub">${dayLabel(tr.profile.t[0])} · ${hhmm(tr.profile.t[0])} → ${hhmm(tr.profile.t[tr.profile.t.length - 1])} · ${Math.round(tr.lengthKm)} km</span>
+            ${miniBar(tr, cov)}
+            <span class="tl-cov"><b class="grade grade-${gr.grade} sm">${gr.grade}</b> ${t('pct.with', { p: Math.round(cov.coveredPct) })} · ${interruptionsText(gr.interruptions)}</span>
           </a>
-          <button class="iconbtn del" data-del="${esc(t.id)}" aria-label="Delete trip">✕</button>
+          <button class="iconbtn del" data-del="${esc(tr.id)}" aria-label="${t('del')}">✕</button>
         </li>`;
-      }).join('')}</ul>` : '<p class="muted">No trips yet. Plan one while you are online; it stays available offline.</p>'}
+      }).join('')}</ul>` : `<p class="muted">${t('notrips')}</p>`}
     </section>`;
   $view.querySelectorAll('[data-del]').forEach((b) => b.addEventListener('click', async () => {
-    if (!confirm('Delete this trip?')) return;
+    if (!confirm(t('del.confirm'))) return;
     await deleteTrip(b.dataset.del); renderHome();
   }));
 }
@@ -99,54 +102,55 @@ async function renderHome() {
 function miniBar(trip, cov) {
   const L = trip.lengthKm || 1;
   return `<svg class="minibar" viewBox="0 0 100 4" preserveAspectRatio="none" aria-hidden="true">${cov.segments.map((s) =>
-    `<rect x="${(100 * s.s) / L}" y="0" width="${Math.max(0.15, (100 * (s.e - s.s)) / L)}" height="4" class="seg-${s.kind}"/>`).join('')}</svg>`;
+    `<rect x="${(100 * s.s) / L}" y="0" width="${Math.max(0.15, (100 * (s.e - s.s)) / L)}" height="4" class="seg-${s.kind}"/>`).join('')}${(cov.antennas || []).map((a) =>
+    `<rect x="${(100 * a.s) / L}" y="1" width="${Math.max(0.15, (100 * (a.e - a.s)) / L)}" height="2" class="seg-ant"/>`).join('')}</svg>`;
 }
 
 // ---------- new trip ----------
 function renderNew() {
   $view.innerHTML = `
-    <h1 class="page-title">Plan a trip</h1>
+    <h1 class="page-title">${t('plan')}</h1>
     <div class="tabs" role="tablist">
-      <button role="tab" class="tab active" data-tab="train" aria-selected="true">Train number</button>
-      <button role="tab" class="tab" data-tab="stations" aria-selected="false">Stations</button>
+      <button role="tab" class="tab active" data-tab="train" aria-selected="true">${t('tab.train')}</button>
+      <button role="tab" class="tab" data-tab="stations" aria-selected="false">${t('tab.stations')}</button>
     </div>
     <section class="card tabpanel" id="tab-train">
       <form id="f-train" class="form">
         <div class="row two">
-          <label>Train number <input name="num" inputmode="numeric" pattern="[0-9]+" required placeholder="e.g. 9531" autocomplete="off"></label>
-          <label>Date <input name="date" type="date" required value="${todayStr()}"></label>
+          <label>${t('f.num')} <input name="num" inputmode="numeric" pattern="[0-9]+" required placeholder="${t('f.num.ph')}" autocomplete="off"></label>
+          <label>${t('f.date')} <input name="date" type="date" required value="${todayStr()}"></label>
         </div>
-        <label>Getting on at <input name="board" list="stlist" required autocomplete="off" placeholder="Your departure station"></label>
-        <label>Getting off at <input name="alight" list="stlist" autocomplete="off" placeholder="Optional: end of the line if empty"></label>
-        <button class="btn primary" type="submit">Find train</button>
-        <p class="muted small">Stops and times come from <a href="https://transitous.org" target="_blank" rel="noopener">Transitous</a> (<a href="https://transitous.org/sources/" target="_blank" rel="noopener">data sources</a>): Trenitalia and Trenord trains, Italo not available. Needs network now, not during the trip.</p>
+        <label>${t('f.board')} <input name="board" list="stlist" required autocomplete="off" placeholder="${t('f.board.ph')}"></label>
+        <label>${t('f.alight')} <input name="alight" list="stlist" autocomplete="off" placeholder="${t('f.alight.ph')}"></label>
+        <button class="btn primary" type="submit">${t('f.find')}</button>
+        <p class="muted small">${t('f.train.note')}</p>
       </form>
       <div id="train-results"></div>
     </section>
     <section class="card tabpanel" id="tab-stations" hidden>
       <form id="f-st" class="form">
-        <label>From <input name="from" list="stlist" required autocomplete="off" placeholder="Departure station"></label>
+        <label>${t('f.from')} <input name="from" list="stlist" required autocomplete="off" placeholder="${t('f.from.ph')}"></label>
         <div id="vias"></div>
-        <button type="button" class="btn link" id="add-via">+ Add a stop in between</button>
-        <label>To <input name="to" list="stlist" required autocomplete="off" placeholder="Arrival station"></label>
+        <button type="button" class="btn link" id="add-via">${t('f.addvia')}</button>
+        <label>${t('f.to')} <input name="to" list="stlist" required autocomplete="off" placeholder="${t('f.to.ph')}"></label>
         <div class="row">
-          <label>Date <input name="date" type="date" required value="${todayStr()}"></label>
-          <label>Departs <input name="dep" type="time" required></label>
-          <label>Arrives <input name="arr" type="time" placeholder="optional"></label>
+          <label>${t('f.date')} <input name="date" type="date" required value="${todayStr()}"></label>
+          <label>${t('f.dep')} <input name="dep" type="time" required></label>
+          <label>${t('f.arr')} <input name="arr" type="time"></label>
         </div>
-        <label class="check"><input type="checkbox" name="regional"> Regional train (avoid high-speed lines)</label>
-        <button class="btn primary" type="submit">Build trip</button>
-        <p class="muted small">Arrival time is optional: without it the app estimates running times from line speeds. Adding the stops your train makes keeps the route on the right line.</p>
+        <label class="check"><input type="checkbox" name="regional"> ${t('f.regional')}</label>
+        <button class="btn primary" type="submit">${t('f.build')}</button>
+        <p class="muted small">${t('f.st.note')}</p>
       </form>
     </section>
     <datalist id="stlist"></datalist>
     <div id="build-status"></div>`;
 
   const tabs = $view.querySelectorAll('.tab');
-  tabs.forEach((t) => t.addEventListener('click', () => {
-    tabs.forEach((x) => { x.classList.toggle('active', x === t); x.setAttribute('aria-selected', x === t); });
-    $view.querySelector('#tab-train').hidden = t.dataset.tab !== 'train';
-    $view.querySelector('#tab-stations').hidden = t.dataset.tab !== 'stations';
+  tabs.forEach((tab) => tab.addEventListener('click', () => {
+    tabs.forEach((x) => { x.classList.toggle('active', x === tab); x.setAttribute('aria-selected', x === tab); });
+    $view.querySelector('#tab-train').hidden = tab.dataset.tab !== 'train';
+    $view.querySelector('#tab-stations').hidden = tab.dataset.tab !== 'stations';
     fillStationList();
   }));
   fillStationList();
@@ -155,7 +159,7 @@ function renderNew() {
     const vias = $view.querySelector('#vias');
     if (vias.children.length >= 6) return;
     const l = document.createElement('label');
-    l.innerHTML = `Via <input name="via" list="stlist" autocomplete="off" placeholder="Intermediate station">`;
+    l.innerHTML = `${t('f.via')} <input name="via" list="stlist" autocomplete="off" placeholder="${t('f.via.ph')}">`;
     vias.appendChild(l);
   });
 
@@ -180,28 +184,28 @@ async function onTrainSearch(ev) {
   const idx = await stations();
   const board = idx.byName(f.board.value) || idx.match(f.board.value);
   const alight = f.alight.value.trim() ? (idx.byName(f.alight.value) || idx.match(f.alight.value)) : null;
-  if (!board) { out.innerHTML = '<p class="error">Unknown departure station. Pick one from the list.</p>'; return; }
-  if (f.alight.value.trim() && !alight) { out.innerHTML = '<p class="error">Unknown arrival station. Pick one from the list.</p>'; return; }
-  out.innerHTML = '<p class="muted">Searching the timetable…</p>';
+  if (!board) { out.innerHTML = `<p class="error">${t('e.board')}</p>`; return; }
+  if (f.alight.value.trim() && !alight) { out.innerHTML = `<p class="error">${t('e.alight')}</p>`; return; }
+  out.innerHTML = `<p class="muted">${t('searching')}</p>`;
   try {
     const res = await findTrain(num, date, board);
     if (!res.length) {
-      out.innerHTML = `<p>No train ${esc(num)} found at ${esc(board.n)} on that day. Check the number and station, or use the Stations tab (Italo trains are not covered).</p>`;
+      out.innerHTML = `<p>${t('e.notrain', { num: esc(num), st: esc(board.n) })}</p>`;
       return;
     }
     if (res.length === 1) { out.innerHTML = ''; return onTrainPick(res[0], board, alight); }
-    out.innerHTML = `<p class="small muted">Pick your train:</p><ul class="choices">${res.map((r, i) =>
+    out.innerHTML = `<p class="small muted">${t('pick')}</p><ul class="choices">${res.map((r, i) =>
       `<li><button class="btn choice" data-i="${i}">${hhmm(r.dep)} · ${esc(r.label)}</button></li>`).join('')}</ul>`;
     out.querySelectorAll('[data-i]').forEach((b) => b.addEventListener('click', () => onTrainPick(res[b.dataset.i], board, alight)));
   } catch (e) {
-    out.innerHTML = `<p class="error">${esc(e.message)}</p><button class="btn" id="go-st">Use stations instead</button>`;
+    out.innerHTML = `<p class="error">${esc(e.message)}</p><button class="btn" id="go-st">${t('use.st')}</button>`;
     out.querySelector('#go-st').addEventListener('click', () => $view.querySelector('[data-tab=stations]').click());
   }
 }
 
 async function onTrainPick(r, board, alight) {
   const status = $view.querySelector('#build-status');
-  status.innerHTML = '<section class="card"><p>Loading train details…</p></section>';
+  status.innerHTML = `<section class="card"><p>${t('loading.train')}</p></section>`;
   try {
     const d = await tripDetails(r.tripId);
     // keep only the part of the run the user travels on
@@ -231,11 +235,11 @@ async function onStationsBuild(ev) {
   const names = [f.from.value, ...[...f.querySelectorAll('[name=via]')].map((i) => i.value).filter(Boolean), f.to.value];
   const resolved = names.map((n) => idx.byName(n) || idx.match(n));
   const missing = names.filter((_, i) => !resolved[i]);
-  if (missing.length) { toast('Unknown station: ' + missing.join(', ')); return; }
+  if (missing.length) { toast(t('e.unknown', { s: missing.join(', ') })); return; }
   const day = localMidnight(f.date.value);
-  const t = (v) => { if (!v) return null; const [h, m] = v.split(':').map(Number); return day + (h * 60 + m) * 60000; };
-  const dep = t(f.dep.value);
-  let arr = t(f.arr.value);
+  const at = (v) => { if (!v) return null; const [h, m] = v.split(':').map(Number); return day + (h * 60 + m) * 60000; };
+  const dep = at(f.dep.value);
+  let arr = at(f.arr.value);
   if (arr && arr < dep) arr += 86400000;
   const stops = resolved.map((s, i) => ({ name: s.n, station: s, arr: i === resolved.length - 1 ? arr : null, dep: i === 0 ? dep : null }));
   await buildAndOpen({ stops, title: `${resolved[0].n} → ${resolved[resolved.length - 1].n}`, avoidHighSpeed: f.regional.checked, source: 'manual' });
@@ -245,9 +249,9 @@ async function buildAndOpen({ stops, title, avoidHighSpeed, source, train }) {
   const status = $view.querySelector('#build-status');
   const say = (m) => { status.innerHTML = `<section class="card"><p>${m}</p></section>`; };
   try {
-    say('Loading the rail network (first time only, a few MB)…');
+    say(t('loading.net'));
     const [graph, idx] = await Promise.all([loadGraph(), stations()]);
-    say('Finding your route and tunnels…');
+    say(t('routing'));
     await new Promise((r) => setTimeout(r, 30));
     let prevSt = null;
     const routeStops = stops.map((s) => {
@@ -271,66 +275,69 @@ async function buildAndOpen({ stops, title, avoidHighSpeed, source, train }) {
 // ---------- trip view ----------
 async function renderTrip(id) {
   const trip = await getTrip(id);
-  if (!trip) { $view.innerHTML = '<section class="card"><p>Trip not found.</p><a class="btn" href="#/">Back</a></section>'; return; }
+  if (!trip) { $view.innerHTML = `<section class="card"><p>${t('notfound')}</p><a class="btn" href="#/">${t('back')}</a></section>`; return; }
   if (!live || live.trip.id !== id) startLive(trip);
   $view.innerHTML = `
     <section class="trip-head">
       <h1 class="page-title">${esc(trip.title)}</h1>
-      <p class="muted">${dayLabel(trip.profile.t[0])} · ${hhmm(trip.profile.t[0])} → ${hhmm(trip.profile.t[trip.profile.t.length - 1])} · ${Math.round(trip.lengthKm)} km · ${trip.stops.length} stops</p>
-      ${trip.skipped?.length ? `<p class="warn small">Not placed on the map: ${esc(trip.skipped.join(', '))}. The route skips them.</p>` : ''}
+      <p class="muted">${dayLabel(trip.profile.t[0])} · ${hhmm(trip.profile.t[0])} → ${hhmm(trip.profile.t[trip.profile.t.length - 1])} · ${Math.round(trip.lengthKm)} km · ${t('n.stops', { n: trip.stops.length })}</p>
+      ${trip.skipped?.length ? `<p class="warn small">${t('skipped', { s: esc(trip.skipped.join(', ')) })}</p>` : ''}
     </section>
     <section id="now" class="card now" aria-live="polite"></section>
     <section class="card">
       <div class="cov-head">
-        <h2>Trip outline</h2>
-        <div id="pct" class="pct"></div>
+        <h2>${t('outline')}</h2>
+        <span id="grade-badge"></span>
       </div>
+      <div id="pct" class="pct"></div>
+      <p id="grade" class="grade-line small"></p>
       <div id="outline" class="outline"></div>
-      <div class="legend"><span><i class="sw seg-good"></i>Good network ≥ ${settings.minGoodMin} min</span><span><i class="sw seg-short"></i>Short gaps</span><span><i class="sw seg-bad"></i>Probably no network (tunnels)</span></div>
+      <div class="legend"><span><i class="sw seg-good"></i>${t('lg.good', { n: settings.minGoodMin })}</span><span><i class="sw seg-short"></i>${t('lg.short')}</span><span><i class="sw seg-bad"></i>${t('lg.bad')}</span>${live.coverage.antennas.length ? `<span><i class="sw seg-ant"></i>${t('lg.ant')}</span>` : ''}</div>
+      ${trip.tunnels.some((tu) => tu.hs) ? `<p class="small muted hs-note">📶 ${settings.hsTunnelsCovered ? t('hs.note.on') : t('hs.note.off')}</p><p class="small hs-note">🛜 ${t('hs.wifi')}</p>` : ''}
     </section>
     <section class="card">
-      <h2>When you'll have coverage</h2>
+      <h2>${t('windows')}</h2>
       <ol id="windows" class="windows"></ol>
     </section>
     <section class="card controls">
-      <h2>Tracking and alerts</h2>
+      <h2>${t('tracking')}</h2>
       <div class="btnrow">
         <button class="btn primary" id="b-track"></button>
-        <button class="btn" id="b-notif">Enable notifications</button>
-        <button class="btn" id="b-wake">Keep screen on</button>
+        <button class="btn" id="b-notif"></button>
+        <button class="btn" id="b-wake"></button>
       </div>
-      <label class="check"><input type="checkbox" id="c-keep"> Keep running in the background (experimental, Android; uses battery)</label>
+      <label class="check"><input type="checkbox" id="c-keep"> ${t('keep')}</label>
       <div class="delay">
-        <span>Delay: <strong id="delay-v"></strong></span>
+        <span>${t('delay')} <strong id="delay-v"></strong></span>
         <button class="btn sm" data-d="-1">−1</button><button class="btn sm" data-d="1">+1</button><button class="btn sm" data-d="5">+5</button>
       </div>
       <p id="track-info" class="small muted"></p>
-      <details class="small"><summary>What works when the phone is locked?</summary>
-        <p>Web apps can't run freely in the background. <strong>Most reliable:</strong> keep this screen open with "Keep screen on" (phone on the tray table, plugged in if you can).</p>
-        <p><strong>Android (Chrome):</strong> notifications still appear while the page is in the background, as long as Chrome keeps it alive; GPS pauses, so position is estimated from the timetable and the last speed. The experimental option above helps Chrome keep the page alive.</p>
-        <p><strong>iPhone:</strong> install the app on the Home Screen. Alerts work while it is open; when locked, iOS pauses it and alerts resume when you come back.</p>
+      <details class="small"><summary>${t('bg.q')}</summary>
+        <p>${t('bg.1')}</p>
+        <p>${t('bg.2')}</p>
+        <p>${t('bg.3')}</p>
       </details>
     </section>
     <section class="card">
-      <details><summary><h2 class="inline">Stops</h2></summary><ol id="stops" class="stops"></ol></details>
-      <details><summary><h2 class="inline">Tunnels (${trip.tunnels.length})</h2></summary><ol id="tunnels" class="stops"></ol></details>
-      <details><summary><h2 class="inline">Demo</h2></summary>
-        <p class="small muted">Replay this trip quickly to see the outline, the countdown and the alerts in action.</p>
-        <div class="btnrow"><button class="btn" id="b-sim">Replay at 60× speed</button></div>
+      <details><summary><h2 class="inline">${t('stops')}</h2></summary><ol id="stops" class="stops"></ol></details>
+      <details><summary><h2 class="inline">${t('tunnels')} (${trip.tunnels.length})</h2></summary><ol id="tunnels" class="stops"></ol></details>
+      <details><summary><h2 class="inline">${t('demo')}</h2></summary>
+        <p class="small muted">${t('demo.text')}</p>
+        <div class="btnrow"><button class="btn" id="b-sim"></button></div>
       </details>
     </section>
-    <p class="small muted attribution">Track and tunnel data © OpenStreetMap contributors (ODbL). Coverage is estimated from tunnels only: valleys and rural gaps are not yet included.</p>`;
+    <p class="small muted attribution">${t('attrib')}</p>`;
 
   const L = live;
   $view.querySelector('#b-track').addEventListener('click', () => { L.tracking ? L.stopTracking() : L.startTracking(); paintControls(); });
   $view.querySelector('#b-notif').addEventListener('click', async () => {
     const p = await requestNotifications();
-    toast(p === 'granted' ? 'Notifications on' : p === 'unsupported' ? 'Notifications are not supported here. On iPhone, install the app first.' : 'Notifications blocked in browser settings');
+    toast(p === 'granted' ? t('n.on') : p === 'unsupported' ? t('n.unsup') : t('n.blocked.long'));
     if (p === 'granted') scheduleTriggers(trip, L.plan, L.tracker.delayMs);
     paintControls();
   });
   $view.querySelector('#b-wake').addEventListener('click', async () => {
-    if (L.wake.wanted) await L.wake.off(); else if (!(await L.wake.on())) toast('Keep-screen-on is not supported in this browser');
+    if (L.wake.wanted) await L.wake.off(); else if (!(await L.wake.on())) toast(t('wake.unsup'));
     paintControls();
   });
   $view.querySelector('#c-keep').addEventListener('change', (e) => { if (e.target.checked) L.keep.start(); else L.keep.stop(); });
@@ -342,7 +349,7 @@ async function renderTrip(id) {
   $view.querySelector('#b-sim').addEventListener('click', () => { L.toggleSim(); paintControls(); });
 
   $view.querySelector('#stops').innerHTML = trip.stops.map((s, i) => `<li><span class="t">${s.arr && i ? hhmm(s.arr) : ''}${s.dep && i < trip.stops.length - 1 ? (i ? ' – ' : '') + hhmm(s.dep) : ''}</span> ${esc(s.name)} <span class="muted">km ${Math.round(s.km)}</span></li>`).join('');
-  $view.querySelector('#tunnels').innerHTML = trip.tunnels.map((t) => `<li><span class="t">${hhmm(timeAtKm(trip.profile, t.s))}</span> ${esc(t.name || 'Tunnel')} <span class="muted">${((t.e - t.s) * 1000) >= 1000 ? (t.e - t.s).toFixed(1) + ' km' : Math.round((t.e - t.s) * 1000) + ' m'} · km ${t.s.toFixed(1)}</span></li>`).join('') || '<li class="muted">No tunnels on this route.</li>';
+  $view.querySelector('#tunnels').innerHTML = trip.tunnels.map((tu) => `<li><span class="t">${hhmm(timeAtKm(trip.profile, tu.s))}</span> ${esc(tu.name || t('tunnel'))}${tu.hs ? ` · <span class="ant">${t('tu.ant')}</span>` : ''} <span class="muted">${((tu.e - tu.s) * 1000) >= 1000 ? (tu.e - tu.s).toFixed(1) + ' km' : Math.round((tu.e - tu.s) * 1000) + ' m'} · km ${tu.s.toFixed(1)}</span></li>`).join('') || `<li class="muted">${t('notunnels')}</li>`;
   paintControls();
   L.refresh(true);
 }
@@ -351,15 +358,15 @@ function paintControls() {
   if (!live) return;
   const q = (s) => $view.querySelector(s);
   if (!q('#b-track')) return;
-  q('#b-track').textContent = live.tracking ? 'Stop tracking' : 'Start trip tracking';
+  q('#b-track').textContent = live.tracking ? t('track.stop') : t('track.start');
   q('#b-track').classList.toggle('active', live.tracking);
   const perm = 'Notification' in window ? Notification.permission : 'unsupported';
-  q('#b-notif').textContent = perm === 'granted' ? 'Notifications on' : perm === 'denied' ? 'Notifications blocked' : 'Enable notifications';
+  q('#b-notif').textContent = perm === 'granted' ? t('n.on') : perm === 'denied' ? t('n.blocked') : t('n.enable');
   q('#b-notif').disabled = perm === 'granted' || perm === 'denied';
-  q('#b-wake').textContent = live.wake.wanted ? 'Screen stays on' : 'Keep screen on';
+  q('#b-wake').textContent = live.wake.wanted ? t('wake.on') : t('wake.off');
   q('#b-wake').classList.toggle('active', live.wake.wanted);
   q('#c-keep').checked = live.keep.active;
-  q('#b-sim').textContent = live.sim ? 'Stop replay' : 'Replay at 60× speed';
+  q('#b-sim').textContent = live.sim ? t('sim.stop') : t('sim.start');
 }
 
 // ---------- live session ----------
@@ -374,6 +381,7 @@ function startLive(trip) {
     timers: [],
   };
   s.plan = alertPlan(trip, s.coverage, settings);
+  s.grade = computeGrade(s.coverage);
   s.tracker.delayMs = (trip.delayMin || 0) * 60000;
   s.now = () => (s.sim ? s.sim.t0 + (Date.now() - s.sim.real0) * s.sim.factor : Date.now());
   s.startTracking = () => { s.tracking = true; s.tracker.start(); s.alerter.check(trip, s.plan, s.estimate(), s.now(), settings, onAlerts); s.refresh(true); };
@@ -417,13 +425,13 @@ function startLive(trip) {
     if (trip.train?.tripId && navigator.onLine && !s.sim) {
       jobs.push(currentDelay(trip.train.tripId).then((d) => {
         const last = s.tracker.fixes[s.tracker.fixes.length - 1];
-        if (d != null && !(last && Date.now() - last.t < 120000)) { s.tracker.setDelayMin(d); notes.push(`delay ${d} min`); }
+        if (d != null && !(last && Date.now() - last.t < 120000)) { s.tracker.setDelayMin(d); notes.push(t('upd.delay', { n: d })); }
       }).catch(() => {}));
     }
     await Promise.all(jobs);
     s.updating = false;
     s.refresh(true);
-    toast(notes.length ? `Updated (${notes.join(', ')})` : 'Updated');
+    toast(notes.length ? t('upd.with', { s: notes.join(', ') }) : t('upd'));
   };
   s.onVis = () => { if (document.visibilityState === 'visible') s.refresh(true); };
   document.addEventListener('visibilitychange', s.onVis);
@@ -471,22 +479,22 @@ function paintLive(s, est, now) {
   let html;
   if (!started && !s.sim) {
     const firstGood = segs.find((g) => g.kind === 'good');
-    html = `<div class="now-main"><span class="dot dot-idle"></span><div><strong>Departs ${hhmm(pt(0))}</strong><span>${firstGood ? `First good window at ${hhmm(pt(firstGood.s))}` : 'No long coverage window on this trip'}</span></div></div>`;
+    html = `<div class="now-main"><span class="dot dot-idle"></span><div><strong>${t('departs', { t: hhmm(pt(0)) })}</strong><span>${firstGood ? t('firstgood', { t: hhmm(pt(firstGood.s)) }) : t('nolong')}</span></div></div>`;
   } else if (ended) {
-    html = `<div class="now-main"><span class="dot dot-idle"></span><div><strong>Trip finished</strong><span>Arrived around ${hhmm(pt(trip.lengthKm))}</span></div></div>`;
+    html = `<div class="now-main"><span class="dot dot-idle"></span><div><strong>${t('finished')}</strong><span>${t('arrived', { t: hhmm(pt(trip.lengthKm)) })}</span></div></div>`;
   } else {
     const nextBad = segs.find((g) => g.kind === 'bad' && g.e > est.km && g !== cur);
     if (cur.kind === 'bad') {
       const after = segs[segs.indexOf(cur) + 1];
-      html = `<div class="now-main"><span class="dot dot-bad"></span><div><strong>No network zone</strong><span>Signal back around ${hhmm(pt(cur.e))} (in ${fmtDur(pt(cur.e) - now)})${after?.kind === 'good' ? `, then good for ${fmtDur(after.te - after.ts)}` : ''}</span></div></div>`;
+      html = `<div class="now-main"><span class="dot dot-bad"></span><div><strong>${t('nonet')}</strong><span>${t('back.at', { t: hhmm(pt(cur.e)), d: fmtDur(pt(cur.e) - now) })}${after?.kind === 'good' ? t('then.good', { d: fmtDur(after.te - after.ts) }) : ''}</span></div></div>`;
     } else {
       const until = nextBad ? pt(nextBad.s) : pt(trip.lengthKm);
-      const kind = cur.kind === 'good' ? 'Good network now' : 'Network now, but short';
-      html = `<div class="now-main"><span class="dot dot-${cur.kind}"></span><div><strong>${kind}</strong><span>${nextBad ? `For about ${fmtDur(until - now)}, until ${hhmm(until)}` : `Until arrival at ${hhmm(until)}`}</span></div></div>`;
+      const kind = cur.kind === 'good' ? t('good.now') : t('short.now');
+      html = `<div class="now-main"><span class="dot dot-${cur.kind}"></span><div><strong>${kind}</strong><span>${nextBad ? t('for.until', { d: fmtDur(until - now), t: hhmm(until) }) : t('until.arr', { t: hhmm(until) })}</span></div></div>`;
     }
   }
-  const src = { gps: 'GPS', 'dead-reckoning': 'estimated (no GPS fix)', schedule: 'timetable', replay: 'replay' }[est.source] || est.source;
-  html += `<div class="now-foot"><p class="small muted">Position: ${src}${est.speed ? ` · ${Math.round(est.speed)} km/h` : ''} · km ${est.km.toFixed(0)} of ${Math.round(trip.lengthKm)} · updated ${new Date(now).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: s.sim ? undefined : '2-digit' })}</p><button class="btn sm" id="b-now"${s.updating ? ' disabled' : ''}>${s.updating ? 'Updating…' : 'Update now'}</button></div>`;
+  const src = { gps: 'GPS', 'dead-reckoning': t('src.dr'), schedule: t('src.sched'), replay: t('src.replay') }[est.source] || est.source;
+  html += `<div class="now-foot"><p class="small muted">${t('pos', { s: src })}${est.speed ? ` · ${Math.round(est.speed)} km/h` : ''} · ${t('km.of', { a: est.km.toFixed(0), b: Math.round(trip.lengthKm) })} · ${t('updated.at', { t: new Date(now).toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit', second: s.sim ? undefined : '2-digit' }) })}</p><button class="btn sm" id="b-now"${s.updating ? ' disabled' : ''}>${s.updating ? t('updating') : t('update.now')}</button></div>`;
   el('#now').innerHTML = html;
 
   // Percentages (whole trip + remaining)
@@ -497,7 +505,10 @@ function paintLive(s, est, now) {
     remAll += d; if (g.kind !== 'bad') remOk += d;
   }
   const remPct = remAll > 0 ? Math.round((100 * remOk) / remAll) : 0;
-  el('#pct').innerHTML = `<strong>${Math.round(coverage.coveredPct)}%</strong> of the trip with network<br><span class="small muted">${Math.round(coverage.goodPct)}% in windows ≥ ${settings.minGoodMin} min${started && !ended ? ` · ${remPct}% of what's left` : ''}</span>`;
+  el('#pct').innerHTML = `${t('pct.trip', { p: `<strong>${Math.round(coverage.coveredPct)}%</strong>` })}<br><span class="small muted">${t('pct.windows', { p: Math.round(coverage.goodPct), n: settings.minGoodMin })}${started && !ended ? ` · ${t('pct.left', { p: remPct })}` : ''}</span>`;
+  const gr = s.grade;
+  el('#grade-badge').innerHTML = `<b class="grade grade-${gr.grade}" title="${esc(t('grade.title'))}" aria-label="${esc(t('grade.title'))}: ${gr.grade}">${gr.grade}</b>`;
+  el('#grade').innerHTML = `<strong>${t('grade.' + gr.grade)}</strong> · <span class="muted">${interruptionsText(gr.interruptions)} · ${t('typical', { d: fmtDur(gr.typicalMs) })}</span> <a href="#/settings" class="muted">(?)</a>`;
 
   // Outline
   el('#outline').innerHTML = outlineSvg(trip, coverage, est.km, pt, started && !ended);
@@ -511,15 +522,19 @@ function paintLive(s, est, now) {
     return `<li class="${past ? 'past' : ''} ${nowIn ? 'current' : ''}">
       <span class="w-time">${hhmm(a)} – ${hhmm(b)}</span>
       <span class="w-dur">${fmtDur(b - a)}</span>
-      <span class="w-where">${esc(nearStop(trip, g.s))} → ${esc(nearStop(trip, g.e))}${nowIn ? ' · <strong>now</strong>' : ''}</span>
+      <span class="w-where">${esc(nearStop(trip, g.s))} → ${esc(nearStop(trip, g.e))}${nowIn ? ` · <strong>${t('now')}</strong>` : ''}</span>
     </li>`;
-  }).join('') : `<li class="muted">No stretch of ${settings.minGoodMin} min or more without long tunnels. Try a shorter minimum in Settings.</li>`;
+  }).join('') : `<li class="muted">${t('nowindows', { n: settings.minGoodMin })}</li>`;
 
   // Controls info
   const tr = s.tracker;
-  const gps = { off: 'GPS off', waiting: 'Waiting for GPS…', ok: 'GPS OK', lost: 'GPS signal lost, estimating', denied: 'Location permission denied: using timetable only', far: 'You seem to be away from this route', unavailable: 'No GPS on this device' }[tr.gpsState];
-  if (el('#track-info')) el('#track-info').textContent = s.sim ? 'Replaying the trip at 60× speed. Alerts fire as they would on the train.' : s.tracking ? `${gps}. Alerts ${settings.leadMin} min before no-network zones and when network comes back.` : 'Start tracking on board to get live position and alerts.';
+  const gps = t('gps.' + tr.gpsState);
+  if (el('#track-info')) el('#track-info').textContent = s.sim ? t('info.sim') : s.tracking ? t('info.track', { g: gps, n: settings.leadMin }) : t('info.idle');
   if (el('#delay-v')) el('#delay-v').textContent = `${Math.round(delay / 60000)} min`;
+}
+
+function interruptionsText(n) {
+  return n === 0 ? t('intr.0') : n === 1 ? t('intr.1') : t('intr.n', { n });
 }
 
 function nearStop(trip, km) {
@@ -533,8 +548,8 @@ function nearStop(trip, km) {
     if (d < ld) { ld = d; lm = l; }
   }
   const sd = Math.abs(best.km - km);
-  if (lm && ld < sd && ld < 15) return lm.on && Math.abs(lm.km - km) < 2 ? lm.name : `near ${lm.name}`;
-  return sd < 15 ? `near ${best.name}` : `km ${Math.round(km)}`;
+  if (lm && ld < sd && ld < 15) return lm.on && Math.abs(lm.km - km) < 2 ? lm.name : t('near', { s: lm.name });
+  return sd < 15 ? t('near', { s: best.name }) : `km ${Math.round(km)}`;
 }
 
 // Linear trip outline: time axis, colored segments, stops, current position
@@ -542,7 +557,7 @@ function outlineSvg(trip, cov, km, pt, showPos) {
   const W = 600, H = 116, X0 = 8, X1 = W - 8, Y = 30, BH = 30;
   const t0 = pt(0), t1 = pt(trip.lengthKm), span = (t1 - t0) || 1;
   const x = (k) => X0 + ((pt(k) - t0) / span) * (X1 - X0);
-  const rects = cov.segments.map((s) => `<rect class="seg-${s.kind}" x="${x(s.s).toFixed(1)}" y="${Y}" width="${Math.max(1.2, x(s.e) - x(s.s)).toFixed(1)}" height="${BH}"><title>${s.kind === 'bad' ? 'No network' : s.kind === 'good' ? 'Good network' : 'Short gap'}: ${hhmm(pt(s.s))}–${hhmm(pt(s.e))}</title></rect>`).join('');
+  const rects = cov.segments.map((s) => `<rect class="seg-${s.kind}" x="${x(s.s).toFixed(1)}" y="${Y}" width="${Math.max(1.2, x(s.e) - x(s.s)).toFixed(1)}" height="${BH}"><title>${t('seg.' + s.kind)}: ${hhmm(pt(s.s))}–${hhmm(pt(s.e))}</title></rect>`).join('') + (cov.antennas || []).map((a) => `<rect class="seg-ant" x="${x(a.s).toFixed(1)}" y="${Y + BH * 0.3}" width="${Math.max(1.2, x(a.e) - x(a.s)).toFixed(1)}" height="${BH * 0.4}"><title>${t('seg.ant')}: ${hhmm(pt(a.s))}–${hhmm(pt(a.e))}</title></rect>`).join('');
   // ticks for stops; labels for stops then major stations passed, wherever they fit
   const n = trip.stops.length;
   const ticks = trip.stops.map((s) => { const sx = x(s.km); return `<line x1="${sx.toFixed(1)}" x2="${sx.toFixed(1)}" y1="${Y - 4}" y2="${Y + BH + 6}" class="st-tick"/>`; }).join('');
@@ -566,7 +581,7 @@ function outlineSvg(trip, cov, km, pt, showPos) {
   const stops = ticks + labels.join('');
   const px = x(Math.min(km, trip.lengthKm));
   const pos = showPos ? `<g class="pos"><line x1="${px}" x2="${px}" y1="${Y - 14}" y2="${Y + BH + 2}"/><path d="M${px - 11},${Y - 28} L${px + 11},${Y - 28} L${px},${Y - 12} Z"/></g>` : '';
-  return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Trip outline with network coverage">${rects}${stops}${pos}</svg>`;
+  return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(t('outline.aria'))}">${rects}${stops}${pos}</svg>`;
 }
 const short = (n) => (n.length > 16 ? n.slice(0, 15) + '…' : n);
 
@@ -576,22 +591,32 @@ function renderSettings() {
     <label class="setting"><span>${label}<small>${help}</small></span>
       <span class="inp"><input type="number" name="${k}" value="${settings[k]}" min="${min}" max="${max}" step="${step}"> ${unit}</span></label>`;
   $view.innerHTML = `
-    <h1 class="page-title">Settings</h1>
+    <h1 class="page-title">${t('settings')}</h1>
     <form id="f-set" class="card form">
-      ${f('minGoodMin', 'Good window length', 'min', 1, 60, 1, 'A stretch counts as good coverage only if it lasts this long')}
-      ${f('minTunnelM', 'Ignore tunnels shorter than', 'm', 0, 5000, 50, 'Short tunnels rarely drop the connection')}
-      ${f('leadMin', 'Alert before losing network', 'min', 0, 10, 0.5, '')}
-      ${f('marginBeforeS', 'Signal fades before a tunnel', 's', 0, 120, 5, '')}
-      ${f('marginAfterS', 'Reconnect time after a tunnel', 's', 0, 180, 5, '')}
-      ${f('mergeGapM', 'Join tunnels closer than', 'm', 0, 3000, 50, 'Short gaps between tunnels rarely give usable signal')}
-      <label class="check"><input type="checkbox" name="notify" ${settings.notify ? 'checked' : ''}> Show system notifications</label>
-      <div class="btnrow"><button class="btn primary" type="submit">Save</button><button class="btn" type="button" id="reset">Defaults</button></div>
+      <label class="setting"><span>${t('s.lang')}</span>
+        <span class="inp"><select name="lang">
+          <option value="auto"${settings.lang === 'auto' ? ' selected' : ''}>${t('s.lang.auto')}</option>
+          ${Object.entries(LANGS).map(([k, v]) => `<option value="${k}"${settings.lang === k ? ' selected' : ''}>${v}</option>`).join('')}
+        </select></span></label>
+      ${f('minGoodMin', t('s.minGood'), 'min', 1, 60, 1, t('s.minGood.h'))}
+      ${f('minTunnelM', t('s.minTunnel'), 'm', 0, 5000, 50, t('s.minTunnel.h'))}
+      ${f('leadMin', t('s.lead'), 'min', 0, 10, 0.5, '')}
+      ${f('marginBeforeS', t('s.before'), 's', 0, 120, 5, '')}
+      ${f('marginAfterS', t('s.after'), 's', 0, 180, 5, '')}
+      ${f('mergeGapM', t('s.merge'), 'm', 0, 3000, 50, t('s.merge.h'))}
+      <label class="check"><input type="checkbox" name="hsTunnelsCovered" ${settings.hsTunnelsCovered ? 'checked' : ''}> ${t('s.hs')}</label>
+      <label class="check"><input type="checkbox" name="notify" ${settings.notify ? 'checked' : ''}> ${t('s.notify')}</label>
+      <div class="btnrow"><button class="btn primary" type="submit">${t('save')}</button><button class="btn" type="button" id="reset">${t('defaults')}</button></div>
     </form>
     <section class="card small">
-      <h2>About the data</h2>
-      <p>Tracks and tunnels come from OpenStreetMap (© OpenStreetMap contributors, ODbL), refreshed monthly. Train stops and times come from <a href="https://transitous.org">Transitous</a> when you look up a train number (<a href="https://transitous.org/sources/">data sources</a>; Trenitalia data via BusOne, for non-commercial use). Nothing is sent to any TrainHotspot server: there is none.</p>
-      <p>Open-source, non-commercial project. Feedback and contact: <a href="https://github.com/HomoHabilis/TrainHotspot/issues">GitHub issues</a>.</p>
-      <p>"No network" zones are estimated from tunnels. Some tunnels have repeaters, and some open stretches (deep valleys, rural areas) have poor signal; those are not yet taken into account.</p>
+      <h2>${t('grade.how')}</h2>
+      <p>${t('grade.explain')}</p>
+    </section>
+    <section class="card small">
+      <h2>${t('about')}</h2>
+      <p>${t('about.1')}</p>
+      <p>${t('about.2')}</p>
+      <p>${t('about.3')}</p>
     </section>`;
   const form = $view.querySelector('#f-set');
   form.addEventListener('submit', (e) => {
@@ -600,14 +625,25 @@ function renderSettings() {
       const v = Number(form[k].value); if (Number.isFinite(v)) settings[k] = v;
     }
     settings.notify = form.notify.checked;
-    saveSettings(settings); toast('Saved'); history.back();
+    settings.hsTunnelsCovered = form.hsTunnelsCovered.checked;
+    settings.lang = form.lang.value;
+    setLang(settings.lang); translateChrome();
+    saveSettings(settings); toast(t('saved')); history.back();
   });
-  $view.querySelector('#reset').addEventListener('click', () => { localStorage.removeItem('th-settings'); settings = loadSettings(); renderSettings(); });
+  $view.querySelector('#reset').addEventListener('click', () => { localStorage.removeItem('th-settings'); settings = loadSettings(); setLang(settings.lang); translateChrome(); renderSettings(); });
 }
 
 // ---------- boot ----------
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('sw.js').catch((e) => console.warn('SW', e));
 }
-updateNetState();
+// Static parts of index.html
+function translateChrome() {
+  document.documentElement.lang = lang();
+  document.querySelector('.brand').setAttribute('aria-label', t('home.aria'));
+  document.querySelector('a[href="#/settings"]').setAttribute('aria-label', t('settings'));
+  document.getElementById('netstate').title = t('net.title');
+  updateNetState();
+}
+translateChrome();
 route();

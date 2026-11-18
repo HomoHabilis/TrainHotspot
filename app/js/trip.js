@@ -37,7 +37,7 @@ export function buildTrip(graph, routeRes, stops, meta = {}) {
       const pts = graph.edgeCoords(edge, reverse);
       const s = km;
       for (const [la, lo] of pts) pushPt(la, lo);
-      segs.push({ s, e: km, tunnel: graph.etun[edge], speed: effSpeed(graph.espd[edge], graph.ehs[edge]), name: graph.names[graph.edges[edge][6]] || '' });
+      segs.push({ s, e: km, tunnel: graph.etun[edge], hs: graph.ehs[edge], speed: effSpeed(graph.espd[edge], graph.ehs[edge]), name: graph.names[graph.edges[edge][6]] || '' });
     }
   });
   // km of each stop: walk path nodes
@@ -83,13 +83,15 @@ export function buildTrip(graph, routeRes, stops, meta = {}) {
     stopKm[lastIdx] = km;
   }
 
-  // tunnels: merge consecutive tunnel segments
+  // tunnels: merge consecutive tunnel segments. hs = on a high-speed line, where
+  // FS and the mobile operators have been installing antennas inside the tunnels.
   const tunnels = [];
   for (const sg of segs) {
     if (!sg.tunnel) continue;
     const last = tunnels[tunnels.length - 1];
-    if (last && sg.s - last.e < 0.002) { last.e = sg.e; if (!last.name && sg.name) last.name = sg.name; }
-    else tunnels.push({ s: sg.s, e: sg.e, name: sg.name });
+    const hs = !!sg.hs;
+    if (last && sg.s - last.e < 0.002 && last.hs === hs) { last.e = sg.e; if (!last.name && sg.name) last.name = sg.name; }
+    else tunnels.push({ s: sg.s, e: sg.e, name: sg.name, hs });
   }
 
   // speed profile (merged) for time model and dead reckoning caps
@@ -225,13 +227,17 @@ export function speedAtKm(trip, k) {
 /**
  * Coverage model in the km domain, then mapped to times.
  * Bad zones: tunnels >= minTunnelM, padded by margins (in seconds, converted with line speed).
- * Returns { segments: [{s,e,kind:'bad'|'short'|'good', names}], good: [...], coveragePct }
+ * Tunnels on high-speed lines count as covered when settings.hsTunnelsCovered is on: they
+ * are returned separately in `antennas` so the outline can show them.
+ * Returns { segments: [{s,e,kind:'bad'|'short'|'good', names}], antennas: [{s,e}], goodPct, coveredPct }
  */
 export function computeCoverage(trip, settings) {
   const minT = settings.minTunnelM / 1000;
   const bad = [];
+  const antennas = [];
   for (const tu of trip.tunnels) {
     if (tu.e - tu.s < minT) continue;
+    if (tu.hs && settings.hsTunnelsCovered) { antennas.push({ s: tu.s, e: tu.e }); continue; }
     const vBefore = speedAtKm(trip, tu.s) / 3600, vAfter = speedAtKm(trip, tu.e) / 3600; // km/s
     const s = Math.max(0, tu.s - settings.marginBeforeS * vBefore);
     const e = Math.min(trip.lengthKm, tu.e + settings.marginAfterS * vAfter);
@@ -262,7 +268,34 @@ export function computeCoverage(trip, settings) {
     if (sg.kind === 'good') goodMs += d;
     if (sg.kind !== 'bad') okMs += d;
   }
-  return { segments, goodPct: (100 * goodMs) / total, coveredPct: (100 * okMs) / total };
+  return { segments, antennas, goodPct: (100 * goodMs) / total, coveredPct: (100 * okMs) / total };
+}
+
+/**
+ * Trip grade, A (best) to F. Coverage share alone is misleading: 90% with a tunnel every
+ * 10 minutes is worse to work with than 80% with one long gap. So the score multiplies the
+ * covered share by a continuity factor based on the typical uninterrupted stretch: the
+ * time-weighted mean length of the stretches with network (the length of the stretch you
+ * are in at a random moment). Stretches of 30 min or more (or half the trip, for short
+ * trips) count as fully continuous.
+ * -> { grade, score, typicalMs, interruptions }
+ */
+export function computeGrade(cov) {
+  const segs = cov.segments;
+  if (!segs.length) return { grade: 'F', score: 0, typicalMs: 0, interruptions: 0 };
+  const total = segs[segs.length - 1].te - segs[0].ts || 1;
+  let sum = 0, sumSq = 0, interruptions = 0;
+  for (const sg of segs) {
+    const d = sg.te - sg.ts;
+    if (sg.kind === 'bad') { interruptions++; continue; }
+    sum += d; sumSq += d * d;
+  }
+  const typicalMs = sum ? sumSq / sum : 0;
+  const target = Math.min(30 * 60000, total / 2);
+  const continuity = Math.min(1, typicalMs / target);
+  const score = cov.coveredPct * (0.4 + 0.6 * continuity);
+  const grade = score >= 85 ? 'A' : score >= 70 ? 'B' : score >= 55 ? 'C' : score >= 40 ? 'D' : score >= 25 ? 'E' : 'F';
+  return { grade, score, typicalMs, interruptions };
 }
 
 export const DEFAULT_SETTINGS = {
@@ -273,4 +306,6 @@ export const DEFAULT_SETTINGS = {
   mergeGapM: 300,     // tunnels closer than this are one zone
   leadMin: 1,         // alert this long before a no-network zone
   notify: true,
+  hsTunnelsCovered: true, // tunnels on high-speed lines have mobile antennas
+  lang: 'auto',       // 'auto' follows the phone or browser language
 };

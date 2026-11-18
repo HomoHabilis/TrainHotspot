@@ -2,7 +2,7 @@
 const VERSION = 'th-v1';
 const SHELL = [
   './', 'index.html', 'styles.css', 'manifest.webmanifest',
-  'js/main.js', 'js/graph.js', 'js/trip.js', 'js/stations.js', 'js/transitous.js', 'js/tracker.js', 'js/alerts.js', 'js/store.js',
+  'js/main.js', 'js/graph.js', 'js/trip.js', 'js/stations.js', 'js/transitous.js', 'js/tracker.js', 'js/alerts.js', 'js/store.js', 'js/i18n.js',
   'icons/icon.svg', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/icon-180.png', 'icons/badge-96.png',
 ];
 const DATA = 'th-data';

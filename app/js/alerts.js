@@ -1,6 +1,7 @@
 // Alerts: in-page banner + sound/vibration in the foreground, system notifications
 // through the service worker (shown in the background while the browser keeps the page alive).
 import { timeAtKm } from './trip.js';
+import { t } from './i18n.js';
 
 export function predictedTime(trip, km, delayMs) {
   return timeAtKm(trip.profile, km) + delayMs;
@@ -13,14 +14,14 @@ export function alertPlan(trip, coverage, settings) {
   segs.forEach((sg, i) => {
     if (sg.kind !== 'bad') return;
     const durMin = Math.max(1, Math.round((sg.te - sg.ts) / 60000));
-    const what = sg.count > 1 ? `${sg.count} tunnels` : (sg.names[0] ? `tunnel ${sg.names[0]}` : 'tunnel');
+    const what = sg.count > 1 ? t('a.tunnels', { n: sg.count }) : (sg.names[0] ? t('a.tunnel.named', { s: sg.names[0] }) : t('a.tunnel'));
     ev.push({ id: `pre-${sg.s.toFixed(3)}`, km: sg.s, leadMs: settings.leadMin * 60000, kind: 'pre',
-      title: `No network in ${settings.leadMin} min`, body: `About ${durMin} min without signal (${what}). Finish uploads and calls now.` });
+      title: t('a.pre.title', { n: settings.leadMin }), body: t('a.pre.body', { d: durMin, what }) });
     const next = segs[i + 1];
     if (next && next.kind === 'good') {
       const g = Math.round((next.te - next.ts) / 60000);
       ev.push({ id: `exit-${sg.e.toFixed(3)}`, km: sg.e, leadMs: 0, kind: 'exit',
-        title: 'Network is back', body: `Good coverage for about ${g} min.` });
+        title: t('a.exit.title'), body: t('a.exit.body', { n: g }) });
     }
   });
   return ev;
@@ -135,7 +136,7 @@ export class KeepAlive {
     if ('mediaSession' in navigator) {
       try {
         // eslint-disable-next-line no-undef
-        navigator.mediaSession.metadata = new MediaMetadata({ title: 'TrainHotspot is tracking your trip', artist: 'Network alerts active' });
+        navigator.mediaSession.metadata = new MediaMetadata({ title: t('ka.title'), artist: t('ka.artist') });
       } catch { /* ignore */ }
     }
   }

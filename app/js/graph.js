@@ -1,5 +1,6 @@
 // Rail graph: loading, decoding and multi-stop routing.
 // Data format produced by tools/build_rail_data.py.
+import { t } from './i18n.js';
 
 export class RailGraph {
   constructor(raw) {
@@ -94,7 +95,7 @@ export class RailGraph {
   route(stops, opts = {}) {
     const valid = stops.map((s) => s.cands && s.cands.length > 0);
     let first = valid.indexOf(true);
-    if (first < 0) throw new Error('None of the stations could be placed on the rail network.');
+    if (first < 0) throw new Error(t('e.noplace'));
     let init = new Map(stops[first].cands.map((c) => [c, 0]));
     const legs = []; // { from: stopIdx, to: stopIdx, prev, dist }
     const skipped = stops.map((_, i) => (i < first ? i : -1)).filter((i) => i >= 0);
@@ -108,7 +109,7 @@ export class RailGraph {
       init = new Map(reached.map((c) => [c, dist[c]]));
       lastStop = i;
     }
-    if (!legs.length) throw new Error('No rail route found between these stations.');
+    if (!legs.length) throw new Error(t('e.noroute'));
     // best end node
     let endNode = -1, endCost = Infinity;
     for (const [node, c] of init) if (c < endCost) { endCost = c; endNode = node; }
@@ -172,7 +173,7 @@ let graphPromise = null;
 export function loadGraph(base = './data/') {
   if (!graphPromise) {
     graphPromise = fetch(base + 'graph.json')
-      .then((r) => { if (!r.ok) throw new Error('Rail data not available (' + r.status + ')'); return r.json(); })
+      .then((r) => { if (!r.ok) throw new Error(t('e.nodata', { s: r.status })); return r.json(); })
       .then((raw) => new RailGraph(raw))
       .catch((e) => { graphPromise = null; throw e; });
   }
@@ -183,7 +184,7 @@ let stationsPromise = null;
 export function loadStations(base = './data/') {
   if (!stationsPromise) {
     stationsPromise = fetch(base + 'stations.json')
-      .then((r) => { if (!r.ok) throw new Error('Station list not available'); return r.json(); })
+      .then((r) => { if (!r.ok) throw new Error(t('e.nostations')); return r.json(); })
       .then((d) => d.stations)
       .catch((e) => { stationsPromise = null; throw e; });
   }

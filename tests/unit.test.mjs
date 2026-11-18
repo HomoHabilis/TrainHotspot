@@ -3,7 +3,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { RailGraph } from '../app/js/graph.js';
-import { buildTrip, computeCoverage, timeAtKm, kmAtTime, DEFAULT_SETTINGS } from '../app/js/trip.js';
+import { buildTrip, computeCoverage, computeGrade, timeAtKm, kmAtTime, DEFAULT_SETTINGS } from '../app/js/trip.js';
+import { t, setLang, lang, LANGS } from '../app/js/i18n.js';
 import { StationIndex, norm } from '../app/js/stations.js';
 import { Tracker } from '../app/js/tracker.js';
 import { syntheticGraph } from './fixture.mjs';
@@ -135,6 +136,66 @@ test('station index search and matching', () => {
   assert.equal(idx.nearest(44.5, 11.5), null);
 });
 
+// Coverage made of alternating windows (minutes): [kind, minutes] pairs
+function fakeCoverage(parts) {
+  let x = 0;
+  const segments = parts.map(([kind, m]) => { const sg = { kind, ts: x, te: x + m * MIN }; x += m * MIN; return sg; });
+  const ok = segments.filter((g) => g.kind !== 'bad').reduce((a, g) => a + g.te - g.ts, 0);
+  return { segments, coveredPct: (100 * ok) / x };
+}
+
+test('grade: frequent short drops rate worse than one long gap', () => {
+  // 2 h, 90% covered, a 1-minute drop every 10 minutes
+  const choppy = fakeCoverage(Array.from({ length: 12 }, () => [['good', 9], ['bad', 1]]).flat());
+  // 2 h, 80% covered, one 24-minute gap in the middle
+  const oneGap = fakeCoverage([['good', 48], ['bad', 24], ['good', 48]]);
+  const a = computeGrade(choppy), b = computeGrade(oneGap);
+  assert.ok(Math.abs(choppy.coveredPct - 90) < 1e-9 && Math.abs(oneGap.coveredPct - 80) < 1e-9);
+  assert.ok(b.score > a.score, `one gap ${b.score} vs choppy ${a.score}`);
+  assert.ok(b.grade < a.grade, `${b.grade} better than ${a.grade}`);
+  assert.equal(a.interruptions, 12);
+  assert.equal(b.interruptions, 1);
+});
+
+test('grade: full coverage is A, no coverage is F', () => {
+  assert.equal(computeGrade(fakeCoverage([['good', 120]])).grade, 'A');
+  assert.equal(computeGrade(fakeCoverage([['good', 15]])).grade, 'A', 'short trip without tunnels');
+  assert.equal(computeGrade(fakeCoverage([['bad', 60]])).grade, 'F');
+  assert.equal(computeGrade({ segments: [], coveredPct: 0 }).grade, 'F');
+});
+
+test('translations: every language has every string with the same placeholders', () => {
+  const keys = [];
+  const enTable = JSON.parse(readFileSync(new URL('../app/js/i18n.js', import.meta.url), 'utf8')
+    .match(/const STRINGS = (\{[\s\S]*?\n\});/)[1]);
+  for (const k of Object.keys(enTable.en)) keys.push(k);
+  assert.ok(keys.length > 100);
+  for (const l of Object.keys(LANGS)) {
+    for (const k of keys) {
+      const v = enTable[l][k];
+      assert.equal(typeof v, 'string', `${l}.${k} missing`);
+      const ph = (s) => [...s.matchAll(/\{(\w+)\}/g)].map((m) => m[1]).sort().join(',');
+      assert.equal(ph(v), ph(enTable.en[k]), `${l}.${k} placeholders`);
+    }
+  }
+  // the strings used in the code all exist
+  const code = ['main.js', 'alerts.js', 'graph.js', 'transitous.js'].map((f) => readFileSync(new URL('../app/js/' + f, import.meta.url), 'utf8')).join('\n');
+  for (const [, k] of code.matchAll(/\bt\('([\w.]*\w)'/g)) assert.ok(k in enTable.en, `missing key ${k}`);
+  for (const g of ['A', 'B', 'C', 'D', 'E', 'F']) assert.ok(('grade.' + g) in enTable.en);
+  for (const g of ['off', 'waiting', 'ok', 'lost', 'denied', 'far', 'unavailable']) assert.ok(('gps.' + g) in enTable.en);
+});
+
+test('translations: language choice and placeholders', () => {
+  setLang('it');
+  assert.equal(t('a.pre.title', { n: 2 }), 'Niente rete tra 2 min');
+  setLang('de');
+  assert.equal(t('intr.n', { n: 3 }), '3 Unterbrechungen');
+  setLang('xx');
+  assert.ok(lang() in LANGS, 'unknown choice falls back to a supported language');
+  setLang('en');
+  assert.equal(t('no.such.key'), 'no.such.key');
+});
+
 // Smoke test on the real OpenStreetMap data shipped with the app
 const realGraph = new RailGraph(JSON.parse(readFileSync(new URL('../app/data/graph.json', import.meta.url))));
 const realIdx = new StationIndex(JSON.parse(readFileSync(new URL('../app/data/stations.json', import.meta.url))).stations);
@@ -152,8 +213,14 @@ test('real data: Firenze to Bologna takes the high-speed tunnels', () => {
   assert.ok(trip.lengthKm > 80 && trip.lengthKm < 110, `length ${trip.lengthKm}`);
   const tunnelKm = trip.tunnels.reduce((a, t) => a + t.e - t.s, 0);
   assert.ok(tunnelKm > 40, `tunnel km ${tunnelKm}`);
-  const cov = computeCoverage(trip, DEFAULT_SETTINGS);
-  assert.ok(cov.goodPct < 50, `goodPct ${cov.goodPct}`);
+  assert.ok(trip.tunnels.some((tu) => tu.hs), 'tunnels are on a high-speed line');
+  const noAntennas = computeCoverage(trip, { ...DEFAULT_SETTINGS, hsTunnelsCovered: false });
+  assert.ok(noAntennas.goodPct < 50, `goodPct ${noAntennas.goodPct}`);
+  assert.equal(noAntennas.antennas.length, 0);
+  const withAntennas = computeCoverage(trip, DEFAULT_SETTINGS);
+  assert.ok(withAntennas.antennas.length > 0);
+  assert.ok(withAntennas.coveredPct > noAntennas.coveredPct + 30, `${withAntennas.coveredPct} vs ${noAntennas.coveredPct}`);
+  assert.ok(computeGrade(withAntennas).score > computeGrade(noAntennas).score);
 });
 
 test('real data: Milano to Roma routes in one piece', () => {

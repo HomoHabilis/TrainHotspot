@@ -15,6 +15,12 @@ A Progressive Web App that tells you, for your train trip in Italy, where you'll
 - **Settings:** good-window length (default 5 min), minimum tunnel length, margins, alert lead time.
 - **Demo:** replay any trip at 60× speed to see the alerts.
 
+## Languages and trip grade
+
+The interface follows the phone or browser language: English, Italian, French, Spanish, Portuguese or German (English otherwise), and can be changed in Settings. Strings live in `app/js/i18n.js`.
+
+Each trip gets a grade from A (best) to F. It starts from the share of the trip with network and lowers it when the network keeps dropping, using the typical uninterrupted stretch with network: 90% coverage with a drop every 10 minutes rates worse than 80% with one long gap. See `computeGrade` in `app/js/trip.js`.
+
 ## Background limits (no native app, no server)
 
 | Platform | Works | Doesn't |
